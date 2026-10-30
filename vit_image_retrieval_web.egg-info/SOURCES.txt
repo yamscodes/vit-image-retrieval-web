@@ -1,0 +1,9 @@
+LICENSE
+README.md
+setup.py
+vit_image_retrieval_web.egg-info/PKG-INFO
+vit_image_retrieval_web.egg-info/SOURCES.txt
+vit_image_retrieval_web.egg-info/dependency_links.txt
+vit_image_retrieval_web.egg-info/entry_points.txt
+vit_image_retrieval_web.egg-info/requires.txt
+vit_image_retrieval_web.egg-info/top_level.txt

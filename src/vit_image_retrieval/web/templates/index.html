@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}ViT Image Retrieval - Home{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h2 class="text-center"><i class="fas fa-home"></i> Welcome to ViT Image Retrieval</h2>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <i class="fas fa-cog fa-3x text-primary mb-3"></i>
+                                <h4 class="card-title">Feature Extraction</h4>
+                                <p class="card-text">
+                                    Index your image collection by extracting features using Vision Transformer models.
+                                    The system will create searchable indexes for efficient retrieval.
+                                </p>
+                                <a href="{{ url_for('feature_extraction') }}" class="btn btn-primary">
+                                    <i class="fas fa-arrow-right"></i> Go to Feature Extraction
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-4">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <i class="fas fa-search fa-3x text-primary mb-3"></i>
+                                <h4 class="card-title">Image Retrieval</h4>
+                                <p class="card-text">
+                                    Search for similar images in your indexed collection. Upload a query image and find
+                                    visually similar images ranked by similarity score.
+                                </p>
+                                <a href="{{ url_for('image_retrieval') }}" class="btn btn-primary">
+                                    <i class="fas fa-arrow-right"></i> Go to Image Retrieval
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h4><i class="fas fa-info-circle"></i> About the System</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5><i class="fas fa-brain"></i> Vision Transformer (ViT)</h5>
+                                <p>
+                                    Uses pre-trained ViT-B/16 model from torchvision for robust feature extraction.
+                                    The model was trained on ImageNet and provides excellent representation of visual content.
+                                </p>
+                            </div>
+                            <div class="col-md-6">
+                                <h5><i class="fas fa-search"></i> FAISS Indexing</h5>
+                                <p>
+                                    Implements FAISS IVF (Inverted File) indexing for efficient similarity search.
+                                    Supports both CPU and GPU acceleration for fast retrieval from large image collections.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <h5><i class="fas fa-cogs"></i> Features</h5>
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item">
+                                        <i class="fas fa-check text-success"></i> Multiple image format support (PNG, JPG, JPEG, WebP)
+                                    </li>
+                                    <li class="list-group-item">
+                                        <i class="fas fa-check text-success"></i> GPU acceleration for faster processing
+                                    </li>
+                                    <li class="list-group-item">
+                                        <i class="fas fa-check text-success"></i> Web-based interface accessible from any browser
+                                    </li>
+                                    <li class="list-group-item">
+                                        <i class="fas fa-check text-success"></i> Progress tracking for batch operations
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

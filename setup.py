@@ -1,38 +1,43 @@
-from setuptools import setup, find_packages
+#!/usr/bin/env python3
+"""
+Setup script for ViT Image Retrieval Web
+"""
 
-with open("README.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
+from setuptools import setup, find_packages
+import os
+
+# Read the contents of requirements.txt
+with open('requirements-web.txt') as f:
+    requirements = [line.strip() for line in f if line.strip() and not line.startswith('#')]
 
 setup(
-    name="vit-image-retrieval",
-    version="1.2.0",
-    author="Dr. Sreenivas Bhattiprolu",
-    author_email="pythonformicroscopists@google.com",
-    description="A Vision Transformer based image retrieval system",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/bnsreenu/vit-image-retrieval",
-    project_urls={
-        "Bug Tracker": "https://github.com/bnsreenu/vit-image-retrieval/issues",
-    },
-    package_dir={"": "src"},
-    packages=find_packages(where="src"),
-    python_requires=">=3.8",
-    install_requires=[
-        "torch>=2.0.0",
-        "torchvision>=0.15.0",
-        "faiss-cpu>=1.7.4",
-        "Pillow>=9.0.0",
-        "numpy>=1.20.0",
-        "PyQt5>=5.15.0",
-    ],
+    name='vit-image-retrieval-web',
+    version='1.0.0',
+    description='Web-based interface for ViT Image Retrieval system using Flask',
+    author='Dr. Sreenivas Bhattiprolu',
+    author_email='',
+    url='https://github.com/yamscodes/vit-image-retrieval-web',
+    packages=find_packages(),
+    python_requires='>=3.8',
+    install_requires=requirements,
     entry_points={
         'console_scripts': [
-            'vit-image-retrieval=vit_image_retrieval.cli:main',
-            'vit=vit_image_retrieval.main:main',  # Simplified command line prompt
-        ],
-        'gui_scripts': [
-            'vit-image-retrieval-gui=vit_image_retrieval.main:main',  
+            'vit-web=vit_image_retrieval.web.run:main',
         ],
     },
+    classifiers=[
+        'Development Status :: 4 - Beta',
+        'Intended Audience :: Developers',
+        'Intended Audience :: Science/Research',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Topic :: Scientific/Engineering :: Image Recognition',
+        'Topic :: Scientific/Engineering :: Artificial Intelligence',
+        'Topic :: Internet :: WWW/HTTP :: WSGI Application',
+    ],
 )

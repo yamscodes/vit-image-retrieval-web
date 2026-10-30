@@ -1,0 +1,731 @@
+{% extends "base.html" %}
+
+{% block title %}ViT Image Retrieval - Image Search{% endblock %}
+
+{% block extra_css %}
+<style>
+    .result-container {
+        margin-top: 20px;
+        padding: 20px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        background: #fafafa;
+    }
+    
+    .query-image {
+        max-width: 300px;
+        max-height: 300px;
+        border: 2px solid #28a745;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .result-image {
+        max-width: 200px;
+        max-height: 200px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        transition: transform 0.2s, box-shadow 0.2s;
+        cursor: pointer;
+    }
+    
+    .result-image:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        border-color: #28a745;
+    }
+    
+    .result-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .result-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .rank-badge {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: #28a745;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 0.9em;
+        z-index: 10;
+    }
+    
+    .similarity-score {
+        background: #f8f9fa;
+        padding: 8px 12px;
+        border-radius: 4px;
+        font-weight: bold;
+        color: #28a745;
+    }
+    
+    .image-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+    }
+    
+    .drop-zone {
+        border: 2px dashed #ccc;
+        border-radius: 8px;
+        padding: 40px;
+        text-align: center;
+        background: #f8f9fa;
+        cursor: pointer;
+        transition: all 0.3s;
+        margin: 20px 0;
+    }
+    
+    .drop-zone:hover {
+        border-color: #28a745;
+        background: #e9ecef;
+    }
+    
+    .drop-zone.dragover {
+        border-color: #28a745;
+        background: #d4edda;
+    }
+    
+    .image-preview-container {
+        position: relative;
+        margin-bottom: 15px;
+    }
+    
+    .image-info {
+        margin-top: 10px;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        font-size: 0.9em;
+    }
+    
+    .loading-spinner {
+        display: inline-block;
+        width: 40px;
+        height: 40px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #28a745;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .index-info {
+        background: #e3f2fd;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #2196f3;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3><i class="fas fa-search"></i> Image Retrieval</h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <!-- Index Selection Section -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5><i class="fas fa-database"></i> Index Selection</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="indexInfo" class="index-info" style="display: none;">
+                                    <h6><i class="fas fa-info-circle"></i> Current Index</h6>
+                                    <p><strong>Index:</strong> <span id="currentIndexName">None</span></p>
+                                    <p><strong>Images:</strong> <span id="currentIndexSize">0</span></p>
+                                </div>
+                                
+                                <div class="alert alert-info" id="noIndexAlert">
+                                    <i class="fas fa-exclamation-circle"></i> No index loaded. 
+                                    Please extract features first or load an existing index.
+                                </div>
+                                
+                                <div class="d-grid gap-2 d-md-flex">
+                                    <button type="button" class="btn btn-primary me-md-2" id="loadLatestBtn">
+                                        <i class="fas fa-download"></i> Load Latest Index
+                                    </button>
+                                    <button type="button" class="btn btn-secondary me-md-2" id="loadSpecificBtn">
+                                        <i class="fas fa-folder-open"></i> Load Specific Index
+                                    </button>
+                                    <button type="button" class="btn btn-info" id="refreshIndexesBtn">
+                                        <i class="fas fa-sync-alt"></i> Refresh Index List
+                                    </button>
+                                </div>
+                                
+                                <div id="indexList" class="mt-3" style="display: none;">
+                                    <h6><i class="fas fa-list"></i> Available Indexes</h6>
+                                    <div class="list-group" id="indexListContainer">
+                                        <p class="text-muted">Loading indexes...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Query Image Selection -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5><i class="fas fa-image"></i> Query Image</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="drop-zone" id="dropZone">
+                                    <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
+                                    <h5>Drop Query Image Here</h5>
+                                    <p class="text-muted">or click to browse</p>
+                                    <input type="file" id="queryImageInput" accept=".png,.jpg,.jpeg,.webp" style="display: none;">
+                                </div>
+                                
+                                <div id="queryPreview" style="display: none;">
+                                    <div class="image-preview-container">
+                                        <img id="queryImagePreview" class="query-image" src="" alt="Query Image">
+                                    </div>
+                                    <div class="image-info">
+                                        <p><strong>File:</strong> <span id="queryFilename"></span></p>
+                                    </div>
+                                </div>
+
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
+                                        <label for="numResults" class="form-label">
+                                            <i class="fas fa-list-ol"></i> Number of Results
+                                        </label>
+                                        <input type="number" class="form-control" id="numResults" 
+                                               min="1" max="20" value="5">
+                                    </div>
+                                </div>
+
+                                <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                                    <button type="button" class="btn btn-secondary me-md-2" id="clearQueryBtn">
+                                        <i class="fas fa-times"></i> Clear
+                                    </button>
+                                    <button type="button" class="btn btn-primary" id="searchBtn" disabled>
+                                        <i class="fas fa-search"></i> Search
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Search Results -->
+                        <div id="resultsContainer" style="display: none;">
+                            <div class="card">
+                                <div class="card-header bg-success text-white">
+                                    <h5><i class="fas fa-check-circle"></i> Search Results</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6>Query Image</h6>
+                                            <img id="resultQueryImage" class="query-image" src="" alt="Query Image">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6>Results Summary</h6>
+                                            <div class="alert alert-info">
+                                                Found <strong id="resultsCount">0</strong> similar images
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <h6 class="mt-4"><i class="fas fa-images"></i> Similar Images</h6>
+                                    <div id="resultsGrid" class="image-grid">
+                                        <!-- Results will be populated here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="errorContainer" class="alert alert-danger" style="display: none;">
+                            <i class="fas fa-exclamation-circle"></i> <strong>Error:</strong> <span id="errorMessage"></span>
+                        </div>
+
+                        <div id="loadingContainer" style="display: none;">
+                            <div class="text-center py-4">
+                                <div class="loading-spinner"></div>
+                                <p class="mt-2">Searching for similar images...</p>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-info-circle"></i> How to Use</h5>
+                            </div>
+                            <div class="card-body">
+                                <ol>
+                                    <li><strong>Load an Index:</strong> First, load an existing index or create one using Feature Extraction.</li>
+                                    <li><strong>Upload Query Image:</strong> Drag & drop or click to select a query image.</li>
+                                    <li><strong>Set Parameters:</strong> Choose how many similar images to retrieve.</li>
+                                    <li><strong>Search:</strong> Click Search to find similar images.</li>
+                                    <li><strong>View Results:</strong> Browse through the ranked results.</li>
+                                </ol>
+
+                                <div class="alert alert-info mt-3">
+                                    <i class="fas fa-lightbulb"></i> <strong>Tip:</strong> 
+                                    The similarity score ranges from 0 to 1, where 1 means most similar.
+                                </div>
+
+                                <div class="alert alert-warning mt-3">
+                                    <i class="fas fa-exclamation-triangle"></i> <strong>Note:</strong> 
+                                    Larger indexes may take longer to search. Consider using GPU acceleration for better performance.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h5><i class="fas fa-chart-bar"></i> System Stats</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="systemStats">
+                                    <p><i class="fas fa-spinner fa-spin"></i> Loading statistics...</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h5><i class="fas fa-database"></i> Index Management</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="viewAllIndexesBtn">
+                                        <i class="fas fa-list"></i> View All Indexes
+                                    </button>
+                                    <button type="button" class="btn btn-outline-danger btn-sm" id="deleteIndexBtn">
+                                        <i class="fas fa-trash"></i> Delete Index
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    let currentIndex = null;
+    let currentQueryImage = null;
+
+    // Load system stats
+    loadSystemStats();
+    
+    // Check if we have an index loaded
+    checkIndexStatus();
+
+    // Drop zone functionality
+    const dropZone = document.getElementById('dropZone');
+    const queryImageInput = document.getElementById('queryImageInput');
+    
+    // Highlight drop zone when item is dragged over it
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.add('dragover');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.remove('dragover');
+        }, false);
+    });
+
+    // Handle dropped files
+    dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles(files);
+    });
+
+    // Handle click on drop zone
+    dropZone.addEventListener('click', () => {
+        queryImageInput.click();
+    });
+
+    // Handle file selection via input
+    queryImageInput.addEventListener('change', (e) => {
+        handleFiles(e.target.files);
+    });
+
+    function handleFiles(files) {
+        if (files.length === 0) return;
+        
+        const file = files[0];
+        if (!file.type.startsWith('image/')) {
+            alert('Please select an image file (PNG, JPG, JPEG, WebP).');
+            return;
+        }
+
+        currentQueryImage = file;
+        
+        // Display preview
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            $('#queryImagePreview').attr('src', e.target.result);
+            $('#queryFilename').text(file.name);
+            $('#queryPreview').show();
+            $('#dropZone').hide();
+            $('#searchBtn').prop('disabled', false);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // Clear query button
+    $('#clearQueryBtn').click(function() {
+        currentQueryImage = null;
+        $('#queryImagePreview').attr('src', '');
+        $('#queryFilename').text('');
+        $('#queryPreview').hide();
+        $('#dropZone').show();
+        $('#searchBtn').prop('disabled', true);
+        queryImageInput.value = '';
+    });
+
+    // Load latest index
+    $('#loadLatestBtn').click(function() {
+        loadLatestIndex();
+    });
+
+    // Load specific index
+    $('#loadSpecificBtn').click(function() {
+        // For now, show the index list
+        $('#indexList').show();
+        loadIndexList();
+    });
+
+    // Refresh index list
+    $('#refreshIndexesBtn').click(function() {
+        loadIndexList();
+    });
+
+    // Search button
+    $('#searchBtn').click(function() {
+        if (!currentQueryImage) {
+            alert('Please select a query image first.');
+            return;
+        }
+
+        if (!currentIndex) {
+            alert('Please load an index first.');
+            return;
+        }
+
+        const numResults = parseInt($('#numResults').val());
+        
+        // Show loading
+        $('#loadingContainer').show();
+        $('#resultsContainer').hide();
+        $('#errorContainer').hide();
+        
+        // Disable buttons
+        $('#searchBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Searching...');
+        
+        // Create form data
+        const formData = new FormData();
+        formData.append('query_image', currentQueryImage);
+        formData.append('k', numResults);
+        
+        // Perform search
+        $.ajax({
+            url: '/api/search',
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(data) {
+                if (data.error) {
+                    $('#errorMessage').text(data.error);
+                    $('#errorContainer').show();
+                    return;
+                }
+
+                displayResults(data);
+            },
+            error: function(xhr, status, error) {
+                $('#errorMessage').text('Search failed: ' + error);
+                $('#errorContainer').show();
+            },
+            complete: function() {
+                $('#loadingContainer').hide();
+                $('#searchBtn').prop('disabled', false).html('<i class="fas fa-search"></i> Search');
+            }
+        });
+    });
+
+    function displayResults(data) {
+        // Show results container
+        $('#resultsContainer').show();
+        
+        // Set query image
+        $('#resultQueryImage').attr('src', $('#queryImagePreview').attr('src'));
+        
+        // Set results count
+        $('#resultsCount').text(data.results.length);
+        
+        // Clear previous results
+        $('#resultsGrid').empty();
+        
+        // Display each result
+        data.results.forEach(function(result, index) {
+            const rank = index + 1;
+            const similarityPercent = (result.similarity * 100).toFixed(1);
+            
+            const resultHtml = `
+                <div class="result-card">
+                    <div class="rank-badge">#${rank}</div>
+                    <img src="${result.path}" class="result-image" alt="Result ${rank}" 
+                         onclick="window.open('${result.path}', '_blank')">
+                    <div class="image-info">
+                        <p><strong>File:</strong> ${result.filename}</p>
+                        <p><strong>Similarity:</strong> 
+                            <span class="similarity-score">${similarityPercent}%</span>
+                        </p>
+                        <p><strong>Distance:</strong> ${result.distance.toFixed(4)}</p>
+                    </div>
+                </div>
+            `;
+            
+            $('#resultsGrid').append(resultHtml);
+        });
+    }
+
+    function loadLatestIndex() {
+        $.ajax({
+            url: '/api/list-indexes',
+            method: 'GET',
+            success: function(data) {
+                if (data.error || !data.indexes || data.indexes.length === 0) {
+                    $('#errorMessage').text('No indexes found.');
+                    $('#errorContainer').show();
+                    return;
+                }
+
+                // Get the most recent index (last modified)
+                const latestIndex = data.indexes.reduce((latest, current) => {
+                    return new Date(current.modified) > new Date(latest.modified) ? current : latest;
+                }, data.indexes[0]);
+
+                loadIndex(latestIndex.name, latestIndex.metadata);
+            },
+            error: function(xhr, status, error) {
+                $('#errorMessage').text('Failed to load indexes: ' + error);
+                $('#errorContainer').show();
+            }
+        });
+    }
+
+    function loadIndexList() {
+        $.ajax({
+            url: '/api/list-indexes',
+            method: 'GET',
+            success: function(data) {
+                if (data.error) {
+                    $('#indexListContainer').html('<p class="text-danger">' + data.error + '</p>');
+                    return;
+                }
+
+                if (!data.indexes || data.indexes.length === 0) {
+                    $('#indexListContainer').html('<p class="text-muted">No indexes found.</p>');
+                    return;
+                }
+
+                let html = '';
+                data.indexes.forEach(function(index) {
+                    const date = new Date(index.modified);
+                    html += `
+                        <a href="#" class="list-group-item list-group-item-action index-item" 
+                           data-index="${index.name}" data-metadata="${index.metadata}">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${index.name}</h6>
+                                <small>${date.toLocaleString()}</small>
+                            </div>
+                            <p class="mb-1">Size: ${formatFileSize(index.size)}</p>
+                        </a>
+                    `;
+                });
+                
+                $('#indexListContainer').html(html);
+                
+                // Add click handlers
+                $('.index-item').click(function() {
+                    const indexName = $(this).data('index');
+                    const metadataName = $(this).data('metadata');
+                    loadIndex(indexName, metadataName);
+                });
+            },
+            error: function(xhr, status, error) {
+                $('#indexListContainer').html('<p class="text-danger">Failed to load indexes: ' + error + '</p>');
+            }
+        });
+    }
+
+    function loadIndex(indexName, metadataName) {
+        const indexPath = '/indexes/' + indexName;
+        const metadataPath = '/indexes/' + metadataName;
+        
+        $.ajax({
+            url: '/api/load-index',
+            method: 'POST',
+            data: {
+                index_path: indexPath,
+                metadata_path: metadataPath
+            },
+            success: function(data) {
+                if (data.error) {
+                    $('#errorMessage').text(data.error);
+                    $('#errorContainer').show();
+                    return;
+                }
+
+                currentIndex = {
+                    name: indexName,
+                    size: data.num_images
+                };
+
+                // Update UI
+                $('#currentIndexName').text(indexName);
+                $('#currentIndexSize').text(data.num_images);
+                $('#indexInfo').show();
+                $('#noIndexAlert').hide();
+                $('#searchBtn').prop('disabled', currentQueryImage === null);
+                
+                // Hide index list
+                $('#indexList').hide();
+                
+                // Show success message
+                alert('Index loaded successfully! Ready to search.');
+            },
+            error: function(xhr, status, error) {
+                $('#errorMessage').text('Failed to load index: ' + error);
+                $('#errorContainer').show();
+            }
+        });
+    }
+
+    function checkIndexStatus() {
+        $.ajax({
+            url: '/api/stats',
+            method: 'GET',
+            success: function(data) {
+                if (data.error) {
+                    // No index loaded
+                    $('#indexInfo').hide();
+                    $('#noIndexAlert').show();
+                    return;
+                }
+
+                if (data.num_images && data.num_images > 0) {
+                    currentIndex = {
+                        name: 'Current Index',
+                        size: data.num_images
+                    };
+                    $('#currentIndexName').text('Current Index');
+                    $('#currentIndexSize').text(data.num_images);
+                    $('#indexInfo').show();
+                    $('#noIndexAlert').hide();
+                } else {
+                    $('#indexInfo').hide();
+                    $('#noIndexAlert').show();
+                }
+            },
+            error: function(xhr, status, error) {
+                $('#indexInfo').hide();
+                $('#noIndexAlert').show();
+            }
+        });
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function loadSystemStats() {
+        $.ajax({
+            url: '/api/stats',
+            method: 'GET',
+            success: function(data) {
+                if (data.error) {
+                    $('#systemStats').html('<p class="text-danger">' + data.error + '</p>');
+                    return;
+                }
+
+                let statsHtml = '<ul class="list-group list-group-flush">';
+                if (data.num_images !== undefined) {
+                    statsHtml += '<li class="list-group-item"><strong>Indexed Images:</strong> ' + data.num_images + '</li>';
+                }
+                if (data.feature_dimension !== undefined) {
+                    statsHtml += '<li class="list-group-item"><strong>Feature Dimension:</strong> ' + data.feature_dimension + '</li>';
+                }
+                if (data.gpu_enabled !== undefined) {
+                    statsHtml += '<li class="list-group-item"><strong>GPU Enabled:</strong> ' + (data.gpu_enabled ? 'Yes' : 'No') + '</li>';
+                }
+                statsHtml += '</ul>';
+                
+                $('#systemStats').html(statsHtml);
+            },
+            error: function(xhr, status, error) {
+                $('#systemStats').html('<p class="text-danger">Error loading stats: ' + error + '</p>');
+            }
+        });
+    }
+
+    // View all indexes button
+    $('#viewAllIndexesBtn').click(function() {
+        $('#indexList').show();
+        loadIndexList();
+    });
+
+    // Delete index button
+    $('#deleteIndexBtn').click(function() {
+        if (!currentIndex) {
+            alert('No index selected.');
+            return;
+        }
+        
+        if (confirm('Are you sure you want to delete the current index?')) {
+            // Implementation would go here
+            alert('Index deletion not yet implemented.');
+        }
+    });
+});
+</script>
+{% endblock %}

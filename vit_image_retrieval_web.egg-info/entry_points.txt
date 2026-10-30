@@ -1,0 +1,2 @@
+[console_scripts]
+vit-web = vit_image_retrieval.web.run:main
