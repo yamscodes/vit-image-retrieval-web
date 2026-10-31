@@ -97,6 +97,41 @@
         color: #6c757d;
         margin-top: 5px;
     }
+    /* Modal styles */
+    .modal-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1050;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .leave-modal {
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        max-width: 500px;
+        width: 90%;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        text-align: center;
+    }
+    .leave-modal h4 {
+        margin-bottom: 20px;
+        color: #333;
+    }
+    .leave-modal p {
+        margin-bottom: 30px;
+        color: #666;
+        font-size: 1.1em;
+    }
+    .leave-modal .btn {
+        min-width: 120px;
+        margin: 0 10px;
+    }
 </style>
 {% endblock %}
 
@@ -282,6 +317,30 @@
         </div>
     </div>
 </div>
+
+<!-- Leave Confirmation Modal -->
+<div class="modal fade" id="leaveConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-exclamation-triangle text-warning"></i> Processing in Progress</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Feature extraction is currently in progress. If you leave this page, the process will be interrupted.</p>
+                <p>Do you want to cancel the extraction and leave the page?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="leaveResumeBtn">
+                    <i class="fas fa-play"></i> Resume Processing
+                </button>
+                <button type="button" class="btn btn-danger" id="leaveCancelBtn">
+                    <i class="fas fa-times"></i> Cancel and Leave
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -289,10 +348,46 @@
 $(document).ready(function() {
     let uploadedFiles = [];
     let startTime = null;
+    let extractionXhr = null;
+    let processingInProgress = false;
+    let leaveModalShown = false;
 
     // Load system stats and available indexes
     loadSystemStats();
     loadAvailableIndexes();
+
+    // Set up beforeunload handler for page leave confirmation
+    window.addEventListener('beforeunload', function(e) {
+        if (processingInProgress && !leaveModalShown) {
+            e.preventDefault();
+            e.returnValue = '';
+            // Show our custom modal instead
+            $('#leaveConfirmModal').modal('show');
+            leaveModalShown = true;
+            return false;
+        }
+    });
+
+    // Handle leave modal buttons
+    $('#leaveResumeBtn').click(function() {
+        $('#leaveConfirmModal').modal('hide');
+        leaveModalShown = false;
+    });
+
+    $('#leaveCancelBtn').click(function() {
+        // Cancel the extraction
+        cancelExtraction();
+        // Allow page to be left
+        leaveModalShown = true;
+        window.removeEventListener('beforeunload', arguments.callee);
+        $('#leaveConfirmModal').modal('hide');
+        // Actually leave the page
+        if (window.history.length > 1) {
+            window.history.back();
+        } else {
+            window.location.href = '/';
+        }
+    });
 
     // Drop zone functionality
     const dropZone = document.getElementById('dropZone');
@@ -393,6 +488,28 @@ $(document).ready(function() {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
+    function cancelExtraction() {
+        if (extractionXhr && extractionXhr.state() === 'pending') {
+            extractionXhr.abort();
+            extractionXhr = null;
+            $('#progressBar').css('width', '0%').text('0%');
+            $('#processedCount').text('Extraction cancelled');
+            $('#progressContainer').hide();
+            processingInProgress = false;
+        }
+        
+        // Reset the form
+        uploadedFiles = [];
+        updateFileList();
+        imagesInput.value = '';
+        $('#indexName').val('');
+        $('#progressContainer').hide();
+        $('#resultContainer').hide();
+        $('#errorContainer').hide();
+        $('#extractBtn').prop('disabled', true).html('<i class="fas fa-cog"></i> Extract Features');
+        $('#cancelBtn').prop('disabled', false);
+    }
+
     // Form submission
     $('#extractionForm').submit(async function(e) {
         e.preventDefault();
@@ -411,7 +528,10 @@ $(document).ready(function() {
         
         // Disable buttons
         $('#extractBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
-        $('#cancelBtn').prop('disabled', true);
+        $('#cancelBtn').prop('disabled', false);
+        
+        // Set processing flag
+        processingInProgress = true;
         
         // Start timer
         startTime = new Date();
@@ -475,18 +595,27 @@ $(document).ready(function() {
                         metadata_path: data.metadata_path,
                         num_images: data.num_images
                     };
+                    
+                    // Reset processing flag
+                    processingInProgress = false;
                 },
                 error: function(xhr, status, error) {
-                    let errorMsg = 'Feature extraction failed: ' + error;
-                    if (xhr.responseJSON && xhr.responseJSON.error) {
-                        errorMsg = xhr.responseJSON.error;
+                    if (status !== 'abort') {
+                        let errorMsg = 'Feature extraction failed: ' + error;
+                        if (xhr.responseJSON && xhr.responseJSON.error) {
+                            errorMsg = xhr.responseJSON.error;
+                        }
+                        throw new Error(errorMsg);
                     }
-                    throw new Error(errorMsg);
+                    // If aborted, don't show error
+                    $('#processedCount').text('Extraction cancelled by user');
                 },
                 complete: function() {
                     // Re-enable buttons
                     $('#extractBtn').prop('disabled', false).html('<i class="fas fa-cog"></i> Extract Features');
                     $('#cancelBtn').prop('disabled', false);
+                    extractionXhr = null;
+                    processingInProgress = false;
                 }
             });
             
@@ -495,11 +624,17 @@ $(document).ready(function() {
             $('#errorMessage').text(error.message);
             $('#errorContainer').show();
             $('#progressContainer').hide();
+            processingInProgress = false;
             
             // Re-enable buttons
             $('#extractBtn').prop('disabled', false).html('<i class="fas fa-cog"></i> Extract Features');
             $('#cancelBtn').prop('disabled', false);
         }
+    });
+
+    // Cancel button
+    $('#cancelBtn').click(function() {
+        cancelExtraction();
     });
 
     // View Index button
@@ -547,21 +682,6 @@ $(document).ready(function() {
                     </div>
                 `;
                 
-                if (data.sample_images && data.sample_images.length > 0) {
-                    html += `
-                        <h6 class="mt-3"><i class="fas fa-images"></i> Sample Images</h6>
-                        <div class="row mt-2">
-                    `;
-                    data.sample_images.forEach(img => {
-                        html += `
-                            <div class="col-md-3 mb-2">
-                                <img src="${img}" class="img-thumbnail" style="max-height: 100px; width: 100%;">
-                            </div>
-                        `;
-                    });
-                    html += '</div>';
-                }
-                
                 content.html(html);
                 modal.modal('show');
             },
@@ -571,30 +691,6 @@ $(document).ready(function() {
             }
         });
     }
-
-    // Cancel button - also cancels ongoing extraction
-    let extractionXhr = null;
-    
-    $('#cancelBtn').click(function() {
-        // If extraction is in progress, cancel the request
-        if (extractionXhr && extractionXhr.state() === 'pending') {
-            extractionXhr.abort();
-            $('#progressBar').css('width', '0%').text('0%');
-            $('#processedCount').text('Extraction cancelled');
-            $('#progressContainer').hide();
-        }
-        
-        // Reset the form
-        uploadedFiles = [];
-        updateFileList();
-        imagesInput.value = '';
-        $('#indexName').val('');
-        $('#progressContainer').hide();
-        $('#resultContainer').hide();
-        $('#errorContainer').hide();
-        $('#extractBtn').prop('disabled', true).html('<i class="fas fa-cog"></i> Extract Features');
-        $('#cancelBtn').prop('disabled', false);
-    });
 
     // New extraction button
     $('#newExtractionBtn').click(function() {
@@ -682,6 +778,7 @@ $(document).ready(function() {
 
     // Make removeFile available globally
     window.removeFile = removeFile;
+    window.cancelExtraction = cancelExtraction;
 });
 </script>
 {% endblock %}

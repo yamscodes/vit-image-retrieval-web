@@ -200,21 +200,31 @@ def register_routes(app):
                 index_path = os.path.join(app.config['INDEX_FOLDER'], index_file)
                 metadata_path = os.path.join(app.config['INDEX_FOLDER'], metadata_file)
                 
+                # Ensure index folder exists
+                os.makedirs(app.config['INDEX_FOLDER'], exist_ok=True)
+                
                 rs.save(index_path, metadata_path)
                 
                 # Verify files were created
                 logger.info(f"Index saved to: {index_path}")
                 logger.info(f"Metadata saved to: {metadata_path}")
-                logger.info(f"Index folder contents: {os.listdir(app.config['INDEX_FOLDER'])}")
+                logger.info(f"Index folder: {app.config['INDEX_FOLDER']}")
+                logger.info(f"Index folder exists: {os.path.exists(app.config['INDEX_FOLDER'])}")
+                if os.path.exists(app.config['INDEX_FOLDER']):
+                    logger.info(f"Index folder contents: {os.listdir(app.config['INDEX_FOLDER'])}")
+                
+                # Return relative paths for the client
+                return_index_path = index_file
+                return_metadata_path = metadata_file
                 
                 return jsonify({
-                    'success': True,
-                    'index_path': index_file,
-                    'metadata_path': metadata_file,
-                    'num_images': len(rs.metadata),
-                    'full_index_path': index_path,
-                    'full_metadata_path': metadata_path
-                })
+                'success': True,
+                'index_path': return_index_path,
+                'metadata_path': return_metadata_path,
+                'num_images': len(rs.metadata),
+                'full_index_path': index_path,
+                'full_metadata_path': metadata_path
+            })
             finally:
                 # Clean up temp directory
                 import shutil
@@ -242,29 +252,42 @@ def register_routes(app):
             if not index_path or not metadata_path:
                 return jsonify({'error': 'Both index_path and metadata_path are required'}), 400
             
-            # Construct absolute paths if they're relative
-            if not os.path.isabs(index_path):
-                index_path = os.path.join(app.root_path, index_path.lstrip('/'))
-            if not os.path.isabs(metadata_path):
-                metadata_path = os.path.join(app.root_path, metadata_path.lstrip('/'))
+            # Construct absolute paths - handle both /indexes/filename and filename formats
+            index_folder = app.config['INDEX_FOLDER']
+            
+            # Remove leading slash if present
+            index_filename = index_path.lstrip('/')
+            metadata_filename = metadata_path.lstrip('/')
+            
+            # Construct full paths
+            full_index_path = os.path.join(index_folder, index_filename)
+            full_metadata_path = os.path.join(index_folder, metadata_filename)
+            
+            logger.info(f"Attempting to load index from: {full_index_path}")
+            logger.info(f"Attempting to load metadata from: {full_metadata_path}")
             
             # Check if files exist
-            if not os.path.exists(index_path):
-                return jsonify({'error': f'Index file not found: {index_path}'}), 404
-            if not os.path.exists(metadata_path):
-                return jsonify({'error': f'Metadata file not found: {metadata_path}'}), 404
+            if not os.path.exists(full_index_path):
+                logger.error(f'Index file not found: {full_index_path}')
+                logger.error(f'Index folder contents: {os.listdir(index_folder) if os.path.exists(index_folder) else "Index folder does not exist"}')
+                return jsonify({'error': f'Index file not found: {index_filename}. Available files: {os.listdir(index_folder) if os.path.exists(index_folder) else []}'}), 404
+            if not os.path.exists(full_metadata_path):
+                logger.error(f'Metadata file not found: {full_metadata_path}')
+                return jsonify({'error': f'Metadata file not found: {metadata_filename}'}), 404
             
             # Create new retrieval system with loaded index
             global retrieval_system
             retrieval_system = ImageRetrievalSystem(
-                index_path=index_path,
-                metadata_path=metadata_path
+                index_path=full_index_path,
+                metadata_path=full_metadata_path
             )
+            
+            logger.info(f"Successfully loaded index with {retrieval_system.index.ntotal} images")
             
             return jsonify({
                 'success': True,
                 'num_images': retrieval_system.index.ntotal,
-                'index_name': os.path.basename(index_path)
+                'index_name': os.path.basename(index_filename)
             })
             
         except Exception as e:
@@ -278,18 +301,16 @@ def register_routes(app):
         """List available index files."""
         try:
             index_folder = app.config['INDEX_FOLDER']
-            faiss_files = []
-            json_files = []
             
             # Ensure index folder exists
             if not os.path.exists(index_folder):
                 os.makedirs(index_folder, exist_ok=True)
+                return jsonify({'indexes': []})
             
-            for file in os.listdir(index_folder):
-                if file.endswith('.faiss'):
-                    faiss_files.append(file)
-                elif file.endswith('.json'):
-                    json_files.append(file)
+            # Get all files in index folder
+            all_files = os.listdir(index_folder)
+            faiss_files = [f for f in all_files if f.endswith('.faiss')]
+            json_files = [f for f in all_files if f.endswith('.json')]
             
             # Pair .faiss and .json files
             indexes = []
@@ -299,21 +320,30 @@ def register_routes(app):
                 if json_file in json_files:
                     # Get file info
                     faiss_path = os.path.join(index_folder, faiss_file)
-                    stat = os.stat(faiss_path)
-                    indexes.append({
-                        'name': faiss_file,
-                        'metadata': json_file,
-                        'size': stat.st_size,
-                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
-                    })
+                    json_path = os.path.join(index_folder, json_file)
+                    
+                    # Verify both files exist and are valid
+                    if os.path.exists(faiss_path) and os.path.exists(json_path):
+                        stat = os.stat(faiss_path)
+                        indexes.append({
+                            'name': faiss_file,
+                            'metadata': json_file,
+                            'size': stat.st_size,
+                            'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
+                        })
             
             # Sort by modification date (newest first)
             indexes.sort(key=lambda x: x['modified'], reverse=True)
+            
+            logger.info(f"Found {len(indexes)} index pairs in {index_folder}")
+            logger.info(f"Index folder contents: {all_files}")
             
             return jsonify({'indexes': indexes})
             
         except Exception as e:
             logger.error(f"Error listing indexes: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/index-info', methods=['POST'])
