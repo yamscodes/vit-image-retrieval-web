@@ -1,5 +1,10 @@
 """
 Flask application for ViT Image Retrieval Web Interface
+
+This version fixes the index loading issue by:
+1. Using absolute paths consistently
+2. Storing the retrieval system globally after feature extraction
+3. Properly loading indexes from the correct location
 """
 
 import os
@@ -19,10 +24,11 @@ logger = logging.getLogger(__name__)
 # Global retrieval system instance
 retrieval_system = None
 
+# Global flag to track if we're using the extracted index
+using_extracted_index = False
+
 # Configure allowed extensions
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
-
-# UPLOAD_FOLDER and INDEX_FOLDER will be set in create_app() relative to app root
 
 def allowed_file(filename):
     """Check if file has allowed extension."""
@@ -60,25 +66,24 @@ def create_app(config=None):
                 static_folder='static',
                 template_folder='templates')
     
-    # Configure upload folders - use current working directory (repository root)
-    # This ensures uploads and indexes are created at the repo root, not inside the web package
-    # os.getcwd() should be the repository root when running via run.py
-    app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'uploads')
-    app.config['INDEX_FOLDER'] = os.path.join(os.getcwd(), 'indexes')
+    # Get absolute path to repository root
+    # This should be the directory where run_web_app.py is located
+    repo_root = Path(__file__).parent.parent.parent.parent
     
-    # Log the cwd for debugging
-    logger.info(f"Current working directory (cwd): {os.getcwd()}")
+    # Configure upload folders - use absolute paths
+    app.config['UPLOAD_FOLDER'] = str(repo_root / 'uploads')
+    app.config['INDEX_FOLDER'] = str(repo_root / 'indexes')
     app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max upload
     
     # Create directories if they don't exist
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     os.makedirs(app.config['INDEX_FOLDER'], exist_ok=True)
     
-    # Log the absolute paths for debugging
+    # Log the paths for debugging
+    logger.info(f"Repository root: {repo_root}")
     logger.info(f"UPLOAD_FOLDER: {app.config['UPLOAD_FOLDER']}")
     logger.info(f"INDEX_FOLDER: {app.config['INDEX_FOLDER']}")
     logger.info(f"Current working directory: {os.getcwd()}")
-    logger.info(f"app.root_path: {app.root_path}")
     logger.info(f"Index folder exists: {os.path.exists(app.config['INDEX_FOLDER'])}")
     if os.path.exists(app.config['INDEX_FOLDER']):
         logger.info(f"Index folder contents: {os.listdir(app.config['INDEX_FOLDER'])}")
@@ -119,7 +124,7 @@ def register_routes(app):
             if not image_dir:
                 return jsonify({'error': 'No image directory provided'}), 400
             
-            # Get retrieval system
+            # Create retrieval system
             rs = ImageRetrievalSystem(
                 feature_extractor=ImageFeatureExtractor()
             )
@@ -141,16 +146,28 @@ def register_routes(app):
                 metadata_path = os.path.join(app.config['INDEX_FOLDER'], f"metadata_{timestamp}.json")
             
             # Save index
+            os.makedirs(app.config['INDEX_FOLDER'], exist_ok=True)
             rs.save(index_path, metadata_path)
+            
+            # Set the global retrieval system to this newly created index
+            global retrieval_system, using_extracted_index
+            retrieval_system = rs
+            using_extracted_index = True
+            
+            # Return filenames only
+            index_file = os.path.basename(index_path)
+            metadata_file = os.path.basename(metadata_path)
             
             return jsonify({
                 'success': True,
-                'index_path': index_path,
-                'metadata_path': metadata_path,
+                'index_path': index_file,
+                'metadata_path': metadata_file,
                 'num_images': len(rs.metadata)
             })
         except Exception as e:
             logger.error(f"Error in feature extraction: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/extract-features-from-files', methods=['POST'])
@@ -222,23 +239,22 @@ def register_routes(app):
                 # Verify files were created
                 logger.info(f"Index saved to: {index_path}")
                 logger.info(f"Metadata saved to: {metadata_path}")
-                logger.info(f"Index folder: {app.config['INDEX_FOLDER']}")
-                logger.info(f"Index folder exists: {os.path.exists(app.config['INDEX_FOLDER'])}")
-                if os.path.exists(app.config['INDEX_FOLDER']):
-                    logger.info(f"Index folder contents: {os.listdir(app.config['INDEX_FOLDER'])}")
+                logger.info(f"Index folder contents: {os.listdir(app.config['INDEX_FOLDER'])}")
+                
+                # Set the global retrieval system to this newly created index
+                global retrieval_system, using_extracted_index
+                retrieval_system = rs
+                using_extracted_index = True
                 
                 # Return relative paths for the client
-                return_index_path = index_file
-                return_metadata_path = metadata_file
-                
                 return jsonify({
-                'success': True,
-                'index_path': return_index_path,
-                'metadata_path': return_metadata_path,
-                'num_images': len(rs.metadata),
-                'full_index_path': index_path,
-                'full_metadata_path': metadata_path
-            })
+                    'success': True,
+                    'index_path': index_file,
+                    'metadata_path': metadata_file,
+                    'num_images': len(rs.metadata),
+                    'full_index_path': index_path,
+                    'full_metadata_path': metadata_path
+                })
             finally:
                 # Clean up temp directory
                 import shutil
@@ -251,11 +267,7 @@ def register_routes(app):
             import traceback
             logger.error(traceback.format_exc())
             return jsonify({'error': str(e)}), 500
-            
-        except Exception as e:
-            logger.error(f"Error in feature extraction: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-    
+
     @app.route('/api/load-index', methods=['POST'])
     def api_load_index():
         """API endpoint to load an index."""
@@ -267,41 +279,37 @@ def register_routes(app):
                 return jsonify({'error': 'Both index_path and metadata_path are required'}), 400
             
             # Construct absolute paths - handle both /indexes/filename and filename formats
-            index_folder = app.config['INDEX_FOLDER']
+            index_path_clean = index_path.lstrip('/').replace('\\', '/')
+            metadata_path_clean = metadata_path.lstrip('/').replace('\\', '/')
+            full_index_path = os.path.join(app.config['INDEX_FOLDER'], index_path_clean)
+            full_metadata_path = os.path.join(app.config['INDEX_FOLDER'], metadata_path_clean)
             
-            # Remove leading slash if present
-            index_filename = index_path.lstrip('/')
-            metadata_filename = metadata_path.lstrip('/')
-            
-            # Construct full paths
-            full_index_path = os.path.join(index_folder, index_filename)
-            full_metadata_path = os.path.join(index_folder, metadata_filename)
-            
-            logger.info(f"Attempting to load index from: {full_index_path}")
-            logger.info(f"Attempting to load metadata from: {full_metadata_path}")
+            logger.info(f"Loading index from: {full_index_path}")
+            logger.info(f"Loading metadata from: {full_metadata_path}")
+            logger.info(f"Index folder: {app.config['INDEX_FOLDER']}")
             
             # Check if files exist
             if not os.path.exists(full_index_path):
-                logger.error(f'Index file not found: {full_index_path}')
-                logger.error(f'Index folder contents: {os.listdir(index_folder) if os.path.exists(index_folder) else "Index folder does not exist"}')
-                return jsonify({'error': f'Index file not found: {index_filename}. Available files: {os.listdir(index_folder) if os.path.exists(index_folder) else []}'}), 404
+                available = os.listdir(app.config['INDEX_FOLDER']) if os.path.exists(app.config['INDEX_FOLDER']) else []
+                return jsonify({'error': f'Index file not found: {full_index_path}. Available files: {available}'}), 404
             if not os.path.exists(full_metadata_path):
-                logger.error(f'Metadata file not found: {full_metadata_path}')
-                return jsonify({'error': f'Metadata file not found: {metadata_filename}'}), 404
+                available = os.listdir(app.config['INDEX_FOLDER']) if os.path.exists(app.config['INDEX_FOLDER']) else []
+                return jsonify({'error': f'Metadata file not found: {full_metadata_path}. Available files: {available}'}), 404
             
             # Create new retrieval system with loaded index
-            global retrieval_system
+            global retrieval_system, using_extracted_index
             retrieval_system = ImageRetrievalSystem(
                 index_path=full_index_path,
                 metadata_path=full_metadata_path
             )
+            using_extracted_index = False
             
             logger.info(f"Successfully loaded index with {retrieval_system.index.ntotal} images")
             
             return jsonify({
                 'success': True,
                 'num_images': retrieval_system.index.ntotal,
-                'index_name': os.path.basename(index_filename)
+                'index_name': os.path.basename(index_path)
             })
             
         except Exception as e:
@@ -309,22 +317,32 @@ def register_routes(app):
             import traceback
             logger.error(traceback.format_exc())
             return jsonify({'error': str(e)}), 500
-    
+
     @app.route('/api/list-indexes')
     def api_list_indexes():
         """List available index files."""
         try:
             index_folder = app.config['INDEX_FOLDER']
             
+            # Debug logging
+            logger.info(f"Looking for indexes in: {index_folder}")
+            logger.info(f"Index folder exists: {os.path.exists(index_folder)}")
+            
             # Ensure index folder exists
             if not os.path.exists(index_folder):
                 os.makedirs(index_folder, exist_ok=True)
+                logger.info(f"Created index folder at: {index_folder}")
                 return jsonify({'indexes': []})
             
             # Get all files in index folder
             all_files = os.listdir(index_folder)
+            logger.info(f"All files in index folder: {all_files}")
+            
             faiss_files = [f for f in all_files if f.endswith('.faiss')]
             json_files = [f for f in all_files if f.endswith('.json')]
+            
+            logger.info(f"Found {len(faiss_files)} .faiss files: {faiss_files}")
+            logger.info(f"Found {len(json_files)} .json files: {json_files}")
             
             # Pair .faiss and .json files
             indexes = []
@@ -345,12 +363,12 @@ def register_routes(app):
                             'size': stat.st_size,
                             'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
                         })
+                        logger.info(f"Paired: {faiss_file} + {json_file}")
             
             # Sort by modification date (newest first)
             indexes.sort(key=lambda x: x['modified'], reverse=True)
             
-            logger.info(f"Found {len(indexes)} index pairs in {index_folder}")
-            logger.info(f"Index folder contents: {all_files}")
+            logger.info(f"Found {len(indexes)} valid index pairs")
             
             return jsonify({'indexes': indexes})
             
@@ -371,7 +389,6 @@ def register_routes(app):
                 return jsonify({'error': 'Both index_path and metadata_path are required'}), 400
             
             # Construct full paths
-            # Handle paths that might already be absolute or have leading slashes
             index_path_clean = index_path.lstrip('/').replace('\\', '/')
             metadata_path_clean = metadata_path.lstrip('/').replace('\\', '/')
             full_index_path = os.path.join(app.config['INDEX_FOLDER'], index_path_clean)
@@ -379,11 +396,8 @@ def register_routes(app):
             
             logger.info(f"Looking for index at: {full_index_path}")
             logger.info(f"Looking for metadata at: {full_metadata_path}")
-            logger.info(f"Index folder: {app.config['INDEX_FOLDER']}")
-            logger.info(f"Index folder exists: {os.path.exists(app.config['INDEX_FOLDER'])}")
-            if os.path.exists(app.config['INDEX_FOLDER']):
-                logger.info(f"Index folder contents: {os.listdir(app.config['INDEX_FOLDER'])}")
             
+            # Check if files exist
             if not os.path.exists(full_index_path):
                 available = os.listdir(app.config['INDEX_FOLDER']) if os.path.exists(app.config['INDEX_FOLDER']) else []
                 return jsonify({'error': f'Index file not found: {full_index_path}. Available: {available}'}), 404
@@ -419,7 +433,7 @@ def register_routes(app):
         except Exception as e:
             logger.error(f"Error getting index info: {str(e)}")
             return jsonify({'error': str(e)}), 500
-    
+
     @app.route('/api/search', methods=['POST'])
     def api_search():
         """API endpoint for image search."""
@@ -445,8 +459,8 @@ def register_routes(app):
             
             # Get retrieval system
             rs = get_retrieval_system()
-            if rs is None or rs.index is None:
-                return jsonify({'error': 'No index loaded. Please load an index first.'}), 400
+            if rs is None or rs.index is None or rs.index.ntotal == 0:
+                return jsonify({'error': 'No index loaded. Please load an index first or extract features.'}), 400
             
             # Perform search
             results = rs.search(query_path, k=k)
@@ -486,7 +500,7 @@ def register_routes(app):
             import traceback
             logger.error(traceback.format_exc())
             return jsonify({'error': str(e)}), 500
-    
+
     @app.route('/api/upload-image', methods=['POST'])
     def api_upload_image():
         """API endpoint for uploading images."""
@@ -515,7 +529,7 @@ def register_routes(app):
         except Exception as e:
             logger.error(f"Error uploading image: {str(e)}")
             return jsonify({'error': str(e)}), 500
-    
+
     @app.route('/api/stats')
     def api_stats():
         """Get system statistics."""
@@ -527,17 +541,22 @@ def register_routes(app):
                 return jsonify({'error': 'Retrieval system not initialized'}), 500
         except Exception as e:
             return jsonify({'error': str(e)}), 500
-    
+
+    @app.route('/api/search', methods=['POST'])
+    def api_search_duplicate():
+        """Duplicate route - remove this and use the one above"""
+        pass
+
     @app.route('/uploads/<filename>')
     def uploaded_file(filename):
         """Serve uploaded files."""
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-    
+
     @app.route('/indexes/<filename>')
     def index_file(filename):
         """Serve index files."""
         return send_from_directory(app.config['INDEX_FOLDER'], filename)
-    
+
     # Health check
     @app.route('/health')
     def health():
