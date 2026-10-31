@@ -51,6 +51,7 @@ def main():
     port = int(os.environ.get('FLASK_PORT', '5000'))
     
     print(f"Starting ViT Image Retrieval Web Server...")
+    print(f"Repository root: {Path.cwd()}")
     print(f"Host: {host}")
     print(f"Port: {port}")
     print(f"Debug: {app.config['DEBUG']}")
