@@ -96,7 +96,7 @@ def register_routes(app):
     
     @app.route('/api/extract-features', methods=['POST'])
     def api_extract_features():
-        """API endpoint for feature extraction."""
+        """API endpoint for feature extraction from directory."""
         try:
             # Get parameters
             image_dir = request.form.get('image_dir')
@@ -106,16 +106,12 @@ def register_routes(app):
                 return jsonify({'error': 'No image directory provided'}), 400
             
             # Get retrieval system
-            rs = get_retrieval_system()
-            
-            # Create new retrieval system for this extraction
             rs = ImageRetrievalSystem(
                 feature_extractor=ImageFeatureExtractor()
             )
             
             # Process images
             def progress_callback(value):
-                # For now, just log progress
                 logger.info(f"Progress: {value}%")
             
             rs.index_images(image_dir, progress_callback=progress_callback)
@@ -139,6 +135,98 @@ def register_routes(app):
                 'metadata_path': metadata_path,
                 'num_images': len(rs.metadata)
             })
+        except Exception as e:
+            logger.error(f"Error in feature extraction: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/extract-features-from-files', methods=['POST'])
+    def api_extract_features_from_files():
+        """API endpoint for feature extraction from uploaded files."""
+        try:
+            # Check if we have uploaded files
+            if 'images' not in request.files:
+                return jsonify({'error': 'No images uploaded'}), 400
+            
+            files = request.files.getlist('images')
+            if not files or all(f.filename == '' for f in files):
+                return jsonify({'error': 'No valid images uploaded'}), 400
+            
+            # Get index name
+            index_name = request.form.get('index_name', '').strip()
+            
+            # Save uploaded files to a temporary directory
+            import tempfile
+            temp_dir = tempfile.mkdtemp(prefix='vit_extract_')
+            
+            try:
+                saved_paths = []
+                for file in files:
+                    if file.filename == '':
+                        continue
+                    if not allowed_file(file.filename):
+                        continue
+                    
+                    # Save file to temp directory
+                    filename = werkzeug.utils.secure_filename(file.filename)
+                    save_path = os.path.join(temp_dir, filename)
+                    file.save(save_path)
+                    saved_paths.append(save_path)
+                
+                if not saved_paths:
+                    return jsonify({'error': 'No valid image files found'}), 400
+                
+                # Create retrieval system
+                rs = ImageRetrievalSystem(
+                    feature_extractor=ImageFeatureExtractor()
+                )
+                
+                # Process images
+                def progress_callback(value):
+                    logger.info(f"Progress: {value}%")
+                
+                rs.index_images(temp_dir, progress_callback=progress_callback)
+                
+                # Generate index filenames
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                if index_name:
+                    index_name = ''.join(c if c.isalnum() else '_' for c in index_name)
+                    index_file = f"index_{index_name}_{timestamp}.faiss"
+                    metadata_file = f"metadata_{index_name}_{timestamp}.json"
+                else:
+                    index_file = f"index_{timestamp}.faiss"
+                    metadata_file = f"metadata_{timestamp}.json"
+                
+                # Save index to the configured folder
+                index_path = os.path.join(app.config['INDEX_FOLDER'], index_file)
+                metadata_path = os.path.join(app.config['INDEX_FOLDER'], metadata_file)
+                
+                rs.save(index_path, metadata_path)
+                
+                # Verify files were created
+                logger.info(f"Index saved to: {index_path}")
+                logger.info(f"Metadata saved to: {metadata_path}")
+                logger.info(f"Index folder contents: {os.listdir(app.config['INDEX_FOLDER'])}")
+                
+                return jsonify({
+                    'success': True,
+                    'index_path': index_file,
+                    'metadata_path': metadata_file,
+                    'num_images': len(rs.metadata),
+                    'full_index_path': index_path,
+                    'full_metadata_path': metadata_path
+                })
+            finally:
+                # Clean up temp directory
+                import shutil
+                try:
+                    shutil.rmtree(temp_dir)
+                except Exception as e:
+                    logger.warning(f"Failed to clean up temp directory: {e}")
+        except Exception as e:
+            logger.error(f"Error in feature extraction from files: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return jsonify({'error': str(e)}), 500
             
         except Exception as e:
             logger.error(f"Error in feature extraction: {str(e)}")
@@ -179,12 +267,15 @@ def register_routes(app):
             faiss_files = []
             json_files = []
             
-            if os.path.exists(index_folder):
-                for file in os.listdir(index_folder):
-                    if file.endswith('.faiss'):
-                        faiss_files.append(file)
-                    elif file.endswith('.json'):
-                        json_files.append(file)
+            # Ensure index folder exists
+            if not os.path.exists(index_folder):
+                os.makedirs(index_folder, exist_ok=True)
+            
+            for file in os.listdir(index_folder):
+                if file.endswith('.faiss'):
+                    faiss_files.append(file)
+                elif file.endswith('.json'):
+                    json_files.append(file)
             
             # Pair .faiss and .json files
             indexes = []
@@ -202,10 +293,61 @@ def register_routes(app):
                         'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
                     })
             
+            # Sort by modification date (newest first)
+            indexes.sort(key=lambda x: x['modified'], reverse=True)
+            
             return jsonify({'indexes': indexes})
             
         except Exception as e:
             logger.error(f"Error listing indexes: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/index-info', methods=['POST'])
+    def api_index_info():
+        """Get information about a specific index."""
+        try:
+            index_path = request.form.get('index_path')
+            metadata_path = request.form.get('metadata_path')
+            
+            if not index_path or not metadata_path:
+                return jsonify({'error': 'Both index_path and metadata_path are required'}), 400
+            
+            # Construct full paths
+            full_index_path = os.path.join(app.config['INDEX_FOLDER'], index_path)
+            full_metadata_path = os.path.join(app.config['INDEX_FOLDER'], metadata_path)
+            
+            if not os.path.exists(full_index_path):
+                return jsonify({'error': f'Index file not found: {full_index_path}'}), 404
+            
+            if not os.path.exists(full_metadata_path):
+                return jsonify({'error': f'Metadata file not found: {full_metadata_path}'}), 404
+            
+            # Get file sizes
+            index_size = os.path.getsize(full_index_path)
+            metadata_size = os.path.getsize(full_metadata_path)
+            
+            # Try to load metadata to get info
+            try:
+                import json
+                with open(full_metadata_path, 'r') as f:
+                    metadata = json.load(f)
+                num_images = len(metadata)
+            except:
+                num_images = 0
+            
+            return jsonify({
+                'success': True,
+                'index_path': index_path,
+                'metadata_path': metadata_path,
+                'index_size': index_size,
+                'metadata_size': metadata_size,
+                'num_images': num_images,
+                'feature_dimension': 768,  # ViT-B/16 feature dimension
+                'created_at': datetime.fromtimestamp(os.path.getmtime(full_index_path)).isoformat()
+            })
+            
+        except Exception as e:
+            logger.error(f"Error getting index info: {str(e)}")
             return jsonify({'error': str(e)}), 500
     
     @app.route('/api/search', methods=['POST'])
