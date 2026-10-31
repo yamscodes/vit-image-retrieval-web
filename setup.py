@@ -17,7 +17,8 @@ setup(
     author='Dr. Sreenivas Bhattiprolu',
     author_email='',
     url='https://github.com/yamscodes/vit-image-retrieval-web',
-    packages=find_packages(),
+    package_dir={'': 'src'},
+    packages=find_packages(where='src'),
     python_requires='>=3.8',
     install_requires=requirements,
     entry_points={

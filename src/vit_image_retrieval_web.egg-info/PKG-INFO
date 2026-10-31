@@ -1,0 +1,39 @@
+Metadata-Version: 2.4
+Name: vit-image-retrieval-web
+Version: 1.0.0
+Summary: Web-based interface for ViT Image Retrieval system using Flask
+Home-page: https://github.com/yamscodes/vit-image-retrieval-web
+Author: Dr. Sreenivas Bhattiprolu
+Author-email: 
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Scientific/Engineering :: Image Recognition
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: Internet :: WWW/HTTP :: WSGI Application
+Requires-Python: >=3.8
+License-File: LICENSE
+Requires-Dist: Flask>=2.0.0
+Requires-Dist: Werkzeug>=2.0.0
+Requires-Dist: python-dotenv>=0.19.0
+Requires-Dist: torch>=2.0.0
+Requires-Dist: torchvision>=0.15.0
+Requires-Dist: faiss-cpu>=1.7.0
+Requires-Dist: Pillow>=9.0.0
+Requires-Dist: numpy>=1.20.0
+Requires-Dist: setuptools>=42.0.0
+Requires-Dist: wheel>=0.37.0
+Dynamic: author
+Dynamic: classifier
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
