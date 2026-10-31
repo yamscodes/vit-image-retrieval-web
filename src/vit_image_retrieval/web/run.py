@@ -28,6 +28,9 @@ def ensure_package_path():
     repo_path = str(repo_root.absolute())
     if repo_path not in sys.path:
         sys.path.insert(0, repo_path)
+    
+    # Set working directory to repo root so that uploads/indexes folders are created there
+    os.chdir(repo_root)
 
 def main():
     """Main entry point for the web application."""

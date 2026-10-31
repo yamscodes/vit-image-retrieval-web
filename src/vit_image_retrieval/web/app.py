@@ -62,8 +62,12 @@ def create_app(config=None):
     
     # Configure upload folders - use current working directory (repository root)
     # This ensures uploads and indexes are created at the repo root, not inside the web package
+    # os.getcwd() should be the repository root when running via run.py
     app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'uploads')
     app.config['INDEX_FOLDER'] = os.path.join(os.getcwd(), 'indexes')
+    
+    # Log the cwd for debugging
+    logger.info(f"Current working directory (cwd): {os.getcwd()}")
     app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max upload
     
     # Create directories if they don't exist
