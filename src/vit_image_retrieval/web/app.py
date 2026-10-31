@@ -19,9 +19,9 @@ logger = logging.getLogger(__name__)
 # Global retrieval system instance
 retrieval_system = None
 
-# Configure upload folder
-UPLOAD_FOLDER = 'uploads'
-INDEX_FOLDER = 'indexes'
+# Configure upload folder - use absolute paths
+UPLOAD_FOLDER = os.path.abspath('uploads')
+INDEX_FOLDER = os.path.abspath('indexes')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
 
 def allowed_file(filename):
@@ -68,6 +68,14 @@ def create_app(config=None):
     # Create directories if they don't exist
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     os.makedirs(app.config['INDEX_FOLDER'], exist_ok=True)
+    
+    # Log the absolute paths for debugging
+    logger.info(f"UPLOAD_FOLDER: {app.config['UPLOAD_FOLDER']}")
+    logger.info(f"INDEX_FOLDER: {app.config['INDEX_FOLDER']}")
+    logger.info(f"Current working directory: {os.getcwd()}")
+    logger.info(f"Index folder exists: {os.path.exists(app.config['INDEX_FOLDER'])}")
+    if os.path.exists(app.config['INDEX_FOLDER']):
+        logger.info(f"Index folder contents: {os.listdir(app.config['INDEX_FOLDER'])}")
     
     # Register blueprints or routes
     register_routes(app)
@@ -357,14 +365,26 @@ def register_routes(app):
                 return jsonify({'error': 'Both index_path and metadata_path are required'}), 400
             
             # Construct full paths
-            full_index_path = os.path.join(app.config['INDEX_FOLDER'], index_path)
-            full_metadata_path = os.path.join(app.config['INDEX_FOLDER'], metadata_path)
+            # Handle paths that might already be absolute or have leading slashes
+            index_path_clean = index_path.lstrip('/').replace('\\', '/')
+            metadata_path_clean = metadata_path.lstrip('/').replace('\\', '/')
+            full_index_path = os.path.join(app.config['INDEX_FOLDER'], index_path_clean)
+            full_metadata_path = os.path.join(app.config['INDEX_FOLDER'], metadata_path_clean)
+            
+            logger.info(f"Looking for index at: {full_index_path}")
+            logger.info(f"Looking for metadata at: {full_metadata_path}")
+            logger.info(f"Index folder: {app.config['INDEX_FOLDER']}")
+            logger.info(f"Index folder exists: {os.path.exists(app.config['INDEX_FOLDER'])}")
+            if os.path.exists(app.config['INDEX_FOLDER']):
+                logger.info(f"Index folder contents: {os.listdir(app.config['INDEX_FOLDER'])}")
             
             if not os.path.exists(full_index_path):
-                return jsonify({'error': f'Index file not found: {full_index_path}'}), 404
+                available = os.listdir(app.config['INDEX_FOLDER']) if os.path.exists(app.config['INDEX_FOLDER']) else []
+                return jsonify({'error': f'Index file not found: {full_index_path}. Available: {available}'}), 404
             
             if not os.path.exists(full_metadata_path):
-                return jsonify({'error': f'Metadata file not found: {full_metadata_path}'}), 404
+                available = os.listdir(app.config['INDEX_FOLDER']) if os.path.exists(app.config['INDEX_FOLDER']) else []
+                return jsonify({'error': f'Metadata file not found: {full_metadata_path}. Available: {available}'}), 404
             
             # Get file sizes
             index_size = os.path.getsize(full_index_path)
