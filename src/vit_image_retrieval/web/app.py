@@ -19,10 +19,10 @@ logger = logging.getLogger(__name__)
 # Global retrieval system instance
 retrieval_system = None
 
-# Configure upload folder - use absolute paths
-UPLOAD_FOLDER = os.path.abspath('uploads')
-INDEX_FOLDER = os.path.abspath('indexes')
+# Configure allowed extensions
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+
+# UPLOAD_FOLDER and INDEX_FOLDER will be set in create_app() relative to app root
 
 def allowed_file(filename):
     """Check if file has allowed extension."""
@@ -60,9 +60,10 @@ def create_app(config=None):
                 static_folder='static',
                 template_folder='templates')
     
-    # Configure upload folders
-    app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-    app.config['INDEX_FOLDER'] = INDEX_FOLDER
+    # Configure upload folders - use current working directory (repository root)
+    # This ensures uploads and indexes are created at the repo root, not inside the web package
+    app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'uploads')
+    app.config['INDEX_FOLDER'] = os.path.join(os.getcwd(), 'indexes')
     app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max upload
     
     # Create directories if they don't exist
@@ -73,6 +74,7 @@ def create_app(config=None):
     logger.info(f"UPLOAD_FOLDER: {app.config['UPLOAD_FOLDER']}")
     logger.info(f"INDEX_FOLDER: {app.config['INDEX_FOLDER']}")
     logger.info(f"Current working directory: {os.getcwd()}")
+    logger.info(f"app.root_path: {app.root_path}")
     logger.info(f"Index folder exists: {os.path.exists(app.config['INDEX_FOLDER'])}")
     if os.path.exists(app.config['INDEX_FOLDER']):
         logger.info(f"Index folder contents: {os.listdir(app.config['INDEX_FOLDER'])}")
