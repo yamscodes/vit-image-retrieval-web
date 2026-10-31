@@ -242,6 +242,18 @@ def register_routes(app):
             if not index_path or not metadata_path:
                 return jsonify({'error': 'Both index_path and metadata_path are required'}), 400
             
+            # Construct absolute paths if they're relative
+            if not os.path.isabs(index_path):
+                index_path = os.path.join(app.root_path, index_path.lstrip('/'))
+            if not os.path.isabs(metadata_path):
+                metadata_path = os.path.join(app.root_path, metadata_path.lstrip('/'))
+            
+            # Check if files exist
+            if not os.path.exists(index_path):
+                return jsonify({'error': f'Index file not found: {index_path}'}), 404
+            if not os.path.exists(metadata_path):
+                return jsonify({'error': f'Metadata file not found: {metadata_path}'}), 404
+            
             # Create new retrieval system with loaded index
             global retrieval_system
             retrieval_system = ImageRetrievalSystem(
@@ -257,6 +269,8 @@ def register_routes(app):
             
         except Exception as e:
             logger.error(f"Error loading index: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return jsonify({'error': str(e)}), 500
     
     @app.route('/api/list-indexes')
@@ -366,7 +380,8 @@ def register_routes(app):
                 return jsonify({'error': 'Invalid file type'}), 400
             
             # Save temporary query image
-            query_path = os.path.join(app.config['UPLOAD_FOLDER'], query_file.filename)
+            query_filename = werkzeug.utils.secure_filename(query_file.filename)
+            query_path = os.path.join(app.config['UPLOAD_FOLDER'], query_filename)
             query_file.save(query_path)
             
             # Get parameters
@@ -380,11 +395,18 @@ def register_routes(app):
             # Perform search
             results = rs.search(query_path, k=k)
             
-            # Format results
+            # Format results - return file paths relative to uploads folder for web access
             formatted_results = []
             for path, similarity, metadata in results:
+                # Make path relative to uploads folder for web serving
+                if path.startswith(app.config['UPLOAD_FOLDER']):
+                    web_path = '/uploads/' + os.path.basename(path)
+                else:
+                    # For paths from the index, use as-is
+                    web_path = path
+                
                 formatted_results.append({
-                    'path': path,
+                    'path': web_path,
                     'similarity': similarity,
                     'distance': metadata['distance'],
                     'filename': metadata['filename'],
@@ -399,12 +421,14 @@ def register_routes(app):
             
             return jsonify({
                 'success': True,
-                'query_image': query_file.filename,
+                'query_image': query_filename,
                 'results': formatted_results
             })
             
         except Exception as e:
             logger.error(f"Error in search: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return jsonify({'error': str(e)}), 500
     
     @app.route('/api/upload-image', methods=['POST'])

@@ -430,8 +430,8 @@ $(document).ready(function() {
             $('#progressBar').css('width', '10%').text('10%');
             $('#processedCount').text('Uploading files...');
             
-            // Call API to extract features
-            $.ajax({
+            // Store reference to xhr for cancellation
+            extractionXhr = $.ajax({
                 url: '/api/extract-features-from-files',
                 method: 'POST',
                 data: formData,
@@ -572,8 +572,19 @@ $(document).ready(function() {
         });
     }
 
-    // Cancel button
+    // Cancel button - also cancels ongoing extraction
+    let extractionXhr = null;
+    
     $('#cancelBtn').click(function() {
+        // If extraction is in progress, cancel the request
+        if (extractionXhr && extractionXhr.state() === 'pending') {
+            extractionXhr.abort();
+            $('#progressBar').css('width', '0%').text('0%');
+            $('#processedCount').text('Extraction cancelled');
+            $('#progressContainer').hide();
+        }
+        
+        // Reset the form
         uploadedFiles = [];
         updateFileList();
         imagesInput.value = '';
@@ -581,6 +592,8 @@ $(document).ready(function() {
         $('#progressContainer').hide();
         $('#resultContainer').hide();
         $('#errorContainer').hide();
+        $('#extractBtn').prop('disabled', true).html('<i class="fas fa-cog"></i> Extract Features');
+        $('#cancelBtn').prop('disabled', false);
     });
 
     // New extraction button
