@@ -540,6 +540,7 @@ $(document).ready(function() {
                     return new Date(current.modified) > new Date(latest.modified) ? current : latest;
                 }, data.indexes[0]);
 
+                // Pass just the filenames, not the full paths
                 loadIndex(latestIndex.name, latestIndex.metadata);
             },
             error: function(xhr, status, error) {
@@ -595,9 +596,10 @@ $(document).ready(function() {
     }
 
     function loadIndex(indexName, metadataName) {
-        // Use absolute paths to the index files
-        const indexPath = '/indexes/' + indexName;
-        const metadataPath = '/indexes/' + metadataName;
+        // Send just the filenames without the /indexes/ prefix
+        // The server will construct the full path
+        const indexPath = indexName;
+        const metadataPath = metadataName;
         
         $.ajax({
             url: '/api/load-index',
