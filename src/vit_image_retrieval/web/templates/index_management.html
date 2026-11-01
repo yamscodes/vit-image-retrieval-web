@@ -392,6 +392,9 @@ $(document).ready(function() {
             $('#noIndexAlert').hide();
             $('#indexLoadSuccess').show();
         }
+        
+        // Load index list after restoring currentIndex
+        loadIndexList();
     }
 
     // Drop zone functionality
