@@ -346,73 +346,38 @@ def register_routes(app):
         Index files are named: index_<identifier>.faiss
         Metadata files are named: metadata_<identifier>.json
         Where <identifier> can contain underscores (e.g., "abc_20261031_121805")
+        
+        Only searches in the configured INDEX_FOLDER to ensure consistency with
+        api_load_index which also uses INDEX_FOLDER.
         """
         try:
-            # Primary index folder from config
             index_folder = app.config['INDEX_FOLDER']
             
-            # Also check common alternative locations
-            # Sometimes indexes are created in the current working directory
-            # or in a different relative path
-            # Get the script directory (where run_web_app.py is)
-            script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-            
-            search_folders = [
-                index_folder,
-                os.path.join(script_dir, 'indexes'),
-                os.path.join(os.getcwd(), 'indexes'),
-                os.path.abspath('indexes'),
-                script_dir,
-            ]
-            
-            # Remove duplicates while preserving order
-            unique_folders = []
-            for folder in search_folders:
-                normalized = os.path.normpath(folder)
-                if normalized not in [os.path.normpath(f) for f in unique_folders]:
-                    unique_folders.append(folder)
-            
-            logger.info(f"Searching for indexes in folders: {unique_folders}")
-            
-            # Collect all faiss and json files from all search folders
-            all_faiss_files = []
-            all_json_files = []
-            folder_with_files = None
-            
-            for folder in unique_folders:
-                logger.info(f"Checking folder: {folder}")
-                if os.path.exists(folder):
-                    try:
-                        files = os.listdir(folder)
-                        logger.info(f"  Found {len(files)} files in {folder}")
-                        if files:
-                            folder_with_files = folder
-                            faiss_in_folder = [f for f in files if f.endswith('.faiss')]
-                            json_in_folder = [f for f in files if f.endswith('.json')]
-                            all_faiss_files.extend(faiss_in_folder)
-                            all_json_files.extend(json_in_folder)
-                            logger.info(f"  .faiss files: {faiss_in_folder}")
-                            logger.info(f"  .json files: {json_in_folder}")
-                    except PermissionError:
-                        logger.warning(f"Permission denied reading folder: {folder}")
-                else:
-                    logger.info(f"  Folder does not exist: {folder}")
-            
-            # If we found files in an alternative folder, update the index folder
-            if folder_with_files and folder_with_files != index_folder:
-                logger.warning(f"Using alternative index folder: {folder_with_files}")
-                index_folder = folder_with_files
-            
-            # Ensure primary index folder exists
+            # Ensure the index folder exists
             if not os.path.exists(index_folder):
                 os.makedirs(index_folder, exist_ok=True)
                 logger.info(f"Created index folder at: {index_folder}")
+                return jsonify({'indexes': []})
             
-            logger.info(f"Total .faiss files found: {len(all_faiss_files)}: {all_faiss_files}")
-            logger.info(f"Total .json files found: {len(all_json_files)}: {all_json_files}")
+            logger.info(f"Searching for indexes in: {index_folder}")
             
-            faiss_files = all_faiss_files
-            json_files = all_json_files
+            # Get all files from the index folder
+            try:
+                files = os.listdir(index_folder)
+                logger.info(f"Found {len(files)} files in {index_folder}")
+            except PermissionError:
+                logger.error(f"Permission denied reading folder: {index_folder}")
+                return jsonify({'error': 'Permission denied reading index folder'}), 500
+            except Exception as e:
+                logger.error(f"Error reading folder {index_folder}: {e}")
+                return jsonify({'error': str(e)}), 500
+            
+            # Separate faiss and json files
+            faiss_files = [f for f in files if f.endswith('.faiss')]
+            json_files = [f for f in files if f.endswith('.json')]
+            
+            logger.info(f".faiss files: {faiss_files}")
+            logger.info(f".json files: {json_files}")
             
             # Pair .faiss and .json files
             # Strategy: For each .faiss file starting with 'index_', 
@@ -424,7 +389,6 @@ def register_routes(app):
             for faiss_file in faiss_files:
                 if faiss_file.startswith('index_'):
                     # Remove 'index_' prefix (6 chars) and '.faiss' suffix (6 chars)
-                    # FIX: Changed from [7:-6] to [6:-6] to correctly extract identifier
                     identifier = faiss_file[6:-6]  # index_<identifier>.faiss -> <identifier>
                     metadata_file = f"metadata_{identifier}.json"
                     
@@ -432,6 +396,7 @@ def register_routes(app):
                         faiss_path = os.path.join(index_folder, faiss_file)
                         json_path = os.path.join(index_folder, metadata_file)
                         
+                        # Both should exist since we got them from the folder listing
                         if os.path.exists(faiss_path) and os.path.exists(json_path):
                             try:
                                 stat = os.stat(faiss_path)
@@ -452,26 +417,6 @@ def register_routes(app):
                             logger.warning(f"No matching metadata file for {faiss_file} (looking for {metadata_file})")
                         else:
                             logger.warning(f"Metadata file {metadata_file} already paired")
-                else:
-                    # Fallback for old naming convention (index_<timestamp>.faiss with index_<timestamp>.json)
-                    base_name = os.path.splitext(faiss_file)[0]
-                    json_file = f"{base_name}.json"
-                    if json_file in json_files and json_file not in paired_metadata:
-                        faiss_path = os.path.join(index_folder, faiss_file)
-                        json_path = os.path.join(index_folder, json_file)
-                        if os.path.exists(faiss_path) and os.path.exists(json_path):
-                            try:
-                                stat = os.stat(faiss_path)
-                                indexes.append({
-                                    'name': faiss_file,
-                                    'metadata': json_file,
-                                    'size': stat.st_size,
-                                    'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
-                                })
-                                paired_metadata.add(json_file)
-                                logger.info(f"Paired (fallback): {faiss_file} + {json_file}")
-                            except Exception as e:
-                                logger.warning(f"Error getting stats for {faiss_file}: {e}")
             
             # Log any unpaired files
             unpaired_json = [f for f in json_files if f not in paired_metadata]
@@ -485,7 +430,7 @@ def register_routes(app):
             # Sort by modification date (newest first)
             indexes.sort(key=lambda x: x['modified'], reverse=True)
             
-            logger.info(f"Found {len(indexes)} valid index pairs")
+            logger.info(f"Found {len(indexes)} valid index pairs in {index_folder}")
             
             return jsonify({'indexes': indexes})
             
