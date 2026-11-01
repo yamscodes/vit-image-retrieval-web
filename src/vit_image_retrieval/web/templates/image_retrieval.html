@@ -67,7 +67,15 @@
         padding: 8px 12px;
         border-radius: 4px;
         font-weight: bold;
+    }
+    .similarity-score.high {
         color: #28a745;
+    }
+    .similarity-score.medium {
+        color: #ffc107;
+    }
+    .similarity-score.low {
+        color: #dc3545;
     }
     
     .image-grid {
@@ -510,6 +518,14 @@ $(document).ready(function() {
             const rank = index + 1;
             const similarityPercent = (result.similarity * 100).toFixed(1);
             
+            // Determine similarity class based on percentage
+            let similarityClass = 'low';
+            if (similarityPercent >= 90) {
+                similarityClass = 'high';
+            } else if (similarityPercent >= 70) {
+                similarityClass = 'medium';
+            }
+            
             const resultHtml = `
                 <div class="result-card">
                     <div class="rank-badge">#${rank}</div>
@@ -518,7 +534,7 @@ $(document).ready(function() {
                     <div class="image-info">
                         <p><strong>File:</strong> ${result.filename}</p>
                         <p><strong>Similarity:</strong> 
-                            <span class="similarity-score">${similarityPercent}%</span>
+                            <span class="similarity-score ${similarityClass}">${similarityPercent}%</span>
                         </p>
                         <p><strong>Distance:</strong> ${result.distance.toFixed(4)}</p>
                     </div>
