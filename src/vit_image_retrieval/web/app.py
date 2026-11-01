@@ -341,7 +341,12 @@ def register_routes(app):
 
     @app.route('/api/list-indexes')
     def api_list_indexes():
-        """List available index files."""
+        """List available index files.
+        
+        Index files are named: index_<identifier>.faiss
+        Metadata files are named: metadata_<identifier>.json
+        Where <identifier> can contain underscores (e.g., "abc_20261031_121805")
+        """
         try:
             index_folder = app.config['INDEX_FOLDER']
             
@@ -356,7 +361,12 @@ def register_routes(app):
                 return jsonify({'indexes': []})
             
             # Get all files in index folder
-            all_files = os.listdir(index_folder)
+            try:
+                all_files = os.listdir(index_folder)
+            except PermissionError:
+                logger.error(f"Permission denied reading index folder: {index_folder}")
+                return jsonify({'error': f'Permission denied reading index folder: {index_folder}'}), 500
+            
             logger.info(f"All files in index folder: {all_files}")
             
             faiss_files = [f for f in all_files if f.endswith('.faiss')]
@@ -366,45 +376,71 @@ def register_routes(app):
             logger.info(f"Found {len(json_files)} .json files: {json_files}")
             
             # Pair .faiss and .json files
-            # Index files are named: index_<identifier>.faiss
-            # Metadata files are named: metadata_<identifier>.json
-            # We need to match them by the identifier part
+            # Strategy: For each .faiss file starting with 'index_', 
+            # extract the identifier (everything between 'index_' and '.faiss')
+            # and look for a matching 'metadata_<identifier>.json'
             indexes = []
+            paired_metadata = set()  # Track which metadata files we've already paired
+            
             for faiss_file in faiss_files:
-                # Try to extract identifier from index file
-                # Format: index_<identifier>.faiss
                 if faiss_file.startswith('index_'):
                     # Remove 'index_' prefix and '.faiss' suffix
-                    identifier = faiss_file[7:-6]
+                    identifier = faiss_file[7:-6]  # index_<identifier>.faiss -> <identifier>
                     metadata_file = f"metadata_{identifier}.json"
-                    if metadata_file in json_files:
+                    
+                    if metadata_file in json_files and metadata_file not in paired_metadata:
                         faiss_path = os.path.join(index_folder, faiss_file)
                         json_path = os.path.join(index_folder, metadata_file)
+                        
                         if os.path.exists(faiss_path) and os.path.exists(json_path):
-                            stat = os.stat(faiss_path)
-                            indexes.append({
-                                'name': faiss_file,
-                                'metadata': metadata_file,
-                                'size': stat.st_size,
-                                'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
-                            })
-                            logger.info(f"Paired: {faiss_file} + {metadata_file}")
+                            try:
+                                stat = os.stat(faiss_path)
+                                indexes.append({
+                                    'name': faiss_file,
+                                    'metadata': metadata_file,
+                                    'size': stat.st_size,
+                                    'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
+                                })
+                                paired_metadata.add(metadata_file)
+                                logger.info(f"Paired: {faiss_file} + {metadata_file}")
+                            except Exception as e:
+                                logger.warning(f"Error getting stats for {faiss_file}: {e}")
+                        else:
+                            logger.warning(f"File exists check failed for {faiss_path} or {json_path}")
+                    else:
+                        if metadata_file not in json_files:
+                            logger.warning(f"No matching metadata file for {faiss_file} (looking for {metadata_file})")
+                        else:
+                            logger.warning(f"Metadata file {metadata_file} already paired")
                 else:
-                    # Fallback for old naming convention
+                    # Fallback for old naming convention (index_<timestamp>.faiss with index_<timestamp>.json)
                     base_name = os.path.splitext(faiss_file)[0]
                     json_file = f"{base_name}.json"
-                    if json_file in json_files:
+                    if json_file in json_files and json_file not in paired_metadata:
                         faiss_path = os.path.join(index_folder, faiss_file)
                         json_path = os.path.join(index_folder, json_file)
                         if os.path.exists(faiss_path) and os.path.exists(json_path):
-                            stat = os.stat(faiss_path)
-                            indexes.append({
-                                'name': faiss_file,
-                                'metadata': json_file,
-                                'size': stat.st_size,
-                                'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
-                            })
-                            logger.info(f"Paired (fallback): {faiss_file} + {json_file}")
+                            try:
+                                stat = os.stat(faiss_path)
+                                indexes.append({
+                                    'name': faiss_file,
+                                    'metadata': json_file,
+                                    'size': stat.st_size,
+                                    'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
+                                })
+                                paired_metadata.add(json_file)
+                                logger.info(f"Paired (fallback): {faiss_file} + {json_file}")
+                            except Exception as e:
+                                logger.warning(f"Error getting stats for {faiss_file}: {e}")
+            
+            # Log any unpaired files
+            unpaired_json = [f for f in json_files if f not in paired_metadata]
+            if unpaired_json:
+                logger.warning(f"Unpaired metadata files: {unpaired_json}")
+            
+            unpaired_faiss = [f for f in faiss_files if not any(idx['name'] == f for idx in indexes)]
+            if unpaired_faiss:
+                logger.warning(f"Unpaired index files: {unpaired_faiss}")
             
             # Sort by modification date (newest first)
             indexes.sort(key=lambda x: x['modified'], reverse=True)
