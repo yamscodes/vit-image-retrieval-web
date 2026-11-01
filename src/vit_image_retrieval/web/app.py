@@ -188,6 +188,7 @@ def register_routes(app):
             # Save uploaded files to a temporary directory first
             import tempfile
             import shutil
+            import uuid
             temp_dir = tempfile.mkdtemp(prefix='vit_extract_')
             
             saved_paths = []
@@ -365,25 +366,45 @@ def register_routes(app):
             logger.info(f"Found {len(json_files)} .json files: {json_files}")
             
             # Pair .faiss and .json files
+            # Index files are named: index_<identifier>.faiss
+            # Metadata files are named: metadata_<identifier>.json
+            # We need to match them by the identifier part
             indexes = []
             for faiss_file in faiss_files:
-                base_name = os.path.splitext(faiss_file)[0]
-                json_file = f"{base_name}.json"
-                if json_file in json_files:
-                    # Get file info
-                    faiss_path = os.path.join(index_folder, faiss_file)
-                    json_path = os.path.join(index_folder, json_file)
-                    
-                    # Verify both files exist and are valid
-                    if os.path.exists(faiss_path) and os.path.exists(json_path):
-                        stat = os.stat(faiss_path)
-                        indexes.append({
-                            'name': faiss_file,
-                            'metadata': json_file,
-                            'size': stat.st_size,
-                            'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
-                        })
-                        logger.info(f"Paired: {faiss_file} + {json_file}")
+                # Try to extract identifier from index file
+                # Format: index_<identifier>.faiss
+                if faiss_file.startswith('index_'):
+                    # Remove 'index_' prefix and '.faiss' suffix
+                    identifier = faiss_file[7:-6]
+                    metadata_file = f"metadata_{identifier}.json"
+                    if metadata_file in json_files:
+                        faiss_path = os.path.join(index_folder, faiss_file)
+                        json_path = os.path.join(index_folder, metadata_file)
+                        if os.path.exists(faiss_path) and os.path.exists(json_path):
+                            stat = os.stat(faiss_path)
+                            indexes.append({
+                                'name': faiss_file,
+                                'metadata': metadata_file,
+                                'size': stat.st_size,
+                                'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
+                            })
+                            logger.info(f"Paired: {faiss_file} + {metadata_file}")
+                else:
+                    # Fallback for old naming convention
+                    base_name = os.path.splitext(faiss_file)[0]
+                    json_file = f"{base_name}.json"
+                    if json_file in json_files:
+                        faiss_path = os.path.join(index_folder, faiss_file)
+                        json_path = os.path.join(index_folder, json_file)
+                        if os.path.exists(faiss_path) and os.path.exists(json_path):
+                            stat = os.stat(faiss_path)
+                            indexes.append({
+                                'name': faiss_file,
+                                'metadata': json_file,
+                                'size': stat.st_size,
+                                'modified': datetime.fromtimestamp(stat.st_mtime).isoformat()
+                            })
+                            logger.info(f"Paired (fallback): {faiss_file} + {json_file}")
             
             # Sort by modification date (newest first)
             indexes.sort(key=lambda x: x['modified'], reverse=True)
@@ -469,9 +490,11 @@ def register_routes(app):
             if not allowed_file(query_file.filename):
                 return jsonify({'error': 'Invalid file type'}), 400
             
-            # Save temporary query image
+            # Save temporary query image with a unique name to avoid conflicts
+            import uuid
             query_filename = werkzeug.utils.secure_filename(query_file.filename)
-            query_path = os.path.join(app.config['UPLOAD_FOLDER'], query_filename)
+            temp_query_filename = f"temp_{uuid.uuid4().hex}_{query_filename}"
+            query_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_query_filename)
             query_file.save(query_path)
             
             # Get parameters
@@ -516,7 +539,7 @@ def register_routes(app):
                     'indexed_at': metadata['indexed_at']
                 })
             
-            # Clean up temporary file
+            # Clean up temporary file (only the temp file we created, not the original)
             try:
                 os.remove(query_path)
             except:

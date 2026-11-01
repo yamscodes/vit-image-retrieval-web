@@ -132,6 +132,11 @@
         border-radius: 8px;
         border-left: 4px solid #2196f3;
     }
+    
+    .index-list-container {
+        max-height: 400px;
+        overflow-y: auto;
+    }
 </style>
 {% endblock %}
 
@@ -176,7 +181,7 @@
                                 
                                 <div id="indexList" class="mt-3" style="display: none;">
                                     <h6><i class="fas fa-list"></i> Available Indexes</h6>
-                                    <div class="list-group" id="indexListContainer">
+                                    <div class="list-group index-list-container" id="indexListContainer">
                                         <p class="text-muted">Loading indexes...</p>
                                     </div>
                                 </div>
@@ -423,7 +428,6 @@ $(document).ready(function() {
 
     // Load specific index
     $('#loadSpecificBtn').click(function() {
-        // For now, show the index list
         $('#indexList').show();
         loadIndexList();
     });
@@ -531,8 +535,7 @@ $(document).ready(function() {
             method: 'GET',
             success: function(data) {
                 if (data.error || !data.indexes || data.indexes.length === 0) {
-                    $('#errorMessage').text('No indexes found.');
-                    $('#errorContainer').show();
+                    showAppMessage('No indexes found.', 'error');
                     return;
                 }
 
@@ -545,8 +548,7 @@ $(document).ready(function() {
                 loadIndex(latestIndex.name, latestIndex.metadata);
             },
             error: function(xhr, status, error) {
-                $('#errorMessage').text('Failed to load indexes: ' + error);
-                $('#errorContainer').show();
+                showAppMessage('Failed to load indexes: ' + error, 'error');
             }
         });
     }
@@ -582,13 +584,6 @@ $(document).ready(function() {
                 });
                 
                 $('#indexListContainer').html(html);
-                
-                // Add click handlers
-                $('.index-item').click(function() {
-                    const indexName = $(this).data('index');
-                    const metadataName = $(this).data('metadata');
-                    loadIndex(indexName, metadataName);
-                });
             },
             error: function(xhr, status, error) {
                 $('#indexListContainer').html('<p class="text-danger">Failed to load indexes: ' + error + '</p>');
@@ -611,8 +606,7 @@ $(document).ready(function() {
             },
             success: function(data) {
                 if (data.error) {
-                    $('#errorMessage').text(data.error);
-                    $('#errorContainer').show();
+                    showAppMessage(data.error, 'error');
                     return;
                 }
 
@@ -635,8 +629,7 @@ $(document).ready(function() {
                 showAppMessage('Index loaded successfully! Ready to search.', 'success');
             },
             error: function(xhr, status, error) {
-                $('#errorMessage').text('Failed to load index: ' + error);
-                $('#errorContainer').show();
+                showAppMessage('Failed to load index: ' + error, 'error');
             }
         });
     }
@@ -729,6 +722,13 @@ $(document).ready(function() {
             // Implementation would go here
             showAppMessage('Index deletion not yet implemented.', 'warning');
         }
+    });
+
+    // Event delegation for dynamically loaded index items
+    $(document).on('click', '.index-item', function() {
+        const indexName = $(this).data('index');
+        const metadataName = $(this).data('metadata');
+        loadIndex(indexName, metadataName);
     });
 });
 </script>
