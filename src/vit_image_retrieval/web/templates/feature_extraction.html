@@ -280,19 +280,7 @@
                             </div>
                         </div>
 
-                        <div class="card mt-3">
-                            <div class="card-header">
-                                <h5><i class="fas fa-database"></i> Available Indexes</h5>
-                            </div>
-                            <div class="card-body">
-                                <div id="availableIndexes">
-                                    <p class="text-muted">Loading indexes...</p>
-                                </div>
-                                <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="refreshIndexesBtn">
-                                    <i class="fas fa-sync-alt"></i> Refresh
-                                </button>
-                            </div>
-                        </div>
+
                     </div>
                 </div>
             </div>
@@ -352,9 +340,8 @@ $(document).ready(function() {
     let processingInProgress = false;
     let leaveModalShown = false;
 
-    // Load system stats and available indexes
+    // Load system stats
     loadSystemStats();
-    loadAvailableIndexes();
 
     // Set up navigation interceptors to avoid browser's native dialog
     let navigationBlocked = false;
@@ -635,8 +622,7 @@ $(document).ready(function() {
                     $('#progressContainer').hide();
                     $('#resultContainer').show();
                     
-                    // Load available indexes
-                    loadAvailableIndexes();
+
                     
                     // Store current index info for view button
                     window.currentIndexInfo = {
@@ -752,10 +738,7 @@ $(document).ready(function() {
         $('#errorContainer').hide();
     });
 
-    // Refresh indexes button
-    $('#refreshIndexesBtn').click(function() {
-        loadAvailableIndexes();
-    });
+
 
     function loadSystemStats() {
         $.ajax({
@@ -787,51 +770,7 @@ $(document).ready(function() {
         });
     }
 
-    function loadAvailableIndexes() {
-        $.ajax({
-            url: '/api/list-indexes',
-            method: 'GET',
-            success: function(data) {
-                console.log('Feature extraction - loadAvailableIndexes API response:', data);
-                
-                if (data.error) {
-                    console.error('Feature extraction - API error:', data.error);
-                    $('#availableIndexes').html('<p class="text-danger">' + data.error + '</p>');
-                    return;
-                }
 
-                if (!data.indexes || data.indexes.length === 0) {
-                    console.log('Feature extraction - No indexes returned');
-                    $('#availableIndexes').html('<p class="text-muted">No indexes available</p>');
-                    return;
-                }
-
-                console.log('Feature extraction - Found indexes:', data.indexes);
-                
-                let html = '<div class="list-group list-group-flush">';
-                data.indexes.forEach(function(index) {
-                    const date = new Date(index.modified);
-                    html += `
-                        <div class="list-group-item">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1">${index.name}</h6>
-                                <small>${date.toLocaleDateString()}</small>
-                            </div>
-                            <p class="mb-1 small">Size: ${formatFileSize(index.size)}</p>
-                        </div>
-                    `;
-                });
-                html += '</div>';
-                
-                $('#availableIndexes').html(html);
-                console.log('Feature extraction - Index list updated with', data.indexes.length, 'indexes');
-            },
-            error: function(xhr, status, error) {
-                console.error('Feature extraction - AJAX error:', status, error);
-                $('#availableIndexes').html('<p class="text-danger">Error loading indexes: ' + error + '</p>');
-            }
-        });
-    }
 
     // Make removeFile available globally
     window.removeFile = removeFile;

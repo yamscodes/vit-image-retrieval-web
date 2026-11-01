@@ -89,6 +89,49 @@
         content.html('<p>' + message + '</p>');
         modal.modal('show');
     }
+
+    // Global function to show confirm modal
+    function showConfirmModal(title, message, callback) {
+        // Create modal dynamically
+        const modalId = 'confirmModal-' + Date.now();
+        const modalHtml = `
+            <div class="modal fade" id="${modalId}" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">${title}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>${message}</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-danger" id="${modalId}-confirm">Confirm</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        $('body').append(modalHtml);
+        const modal = $('#' + modalId);
+        modal.modal('show');
+        
+        $('#' + modalId + '-confirm').click(function() {
+            modal.modal('hide');
+            callback();
+            // Remove modal after it's hidden
+            modal.on('hidden.bs.modal', function() {
+                modal.remove();
+            });
+        });
+        
+        // Remove modal if cancelled
+        modal.on('hidden.bs.modal', function() {
+            modal.remove();
+        });
+    }
     </script>
     {% block extra_js %}{% endblock %}
 </body>

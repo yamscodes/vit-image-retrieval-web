@@ -357,21 +357,7 @@
                             </div>
                         </div>
 
-                        <div class="card mt-3">
-                            <div class="card-header">
-                                <h5><i class="fas fa-database"></i> Index Management</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="d-grid gap-2">
-                                    <button type="button" class="btn btn-outline-primary btn-sm" id="viewAllIndexesBtn">
-                                        <i class="fas fa-list"></i> View All Indexes
-                                    </button>
-                                    <button type="button" class="btn btn-outline-danger btn-sm" id="deleteIndexBtn">
-                                        <i class="fas fa-trash"></i> Delete Index
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+
                     </div>
                 </div>
             </div>
@@ -709,8 +695,8 @@ $(document).ready(function() {
                 $('#noIndexAlert').hide();
                 $('#searchBtn').prop('disabled', currentQueryImage === null);
                 
-                // Hide index list
-                $('#indexList').hide();
+                // Refresh index list to show active state
+                loadIndexList();
                 
                 // Show success message
                 showAppMessage('Index loaded successfully! Ready to search.', 'success');
@@ -832,9 +818,10 @@ $(document).ready(function() {
         const indexName = $(this).data('index');
         const metadataName = $(this).data('metadata');
         
-        if (confirm('Are you sure you want to delete index: ' + indexName + '?')) {
+        // Show custom modal instead of browser confirm
+        showConfirmModal('Delete Index', 'Are you sure you want to delete index: ' + indexName + '?', function() {
             deleteIndex(indexName, metadataName);
-        }
+        });
     });
 
     function deleteIndex(indexName, metadataName) {
