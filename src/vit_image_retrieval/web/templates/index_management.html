@@ -178,6 +178,16 @@
         font-size: 0.8em;
     }
     
+    .active-badge {
+        background-color: #007bff;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.75em;
+        margin-left: 8px;
+        font-weight: bold;
+    }
+    
     .index-actions .load-btn {
         color: #28a745;
     }
@@ -221,8 +231,128 @@
                             </div>
                         </div>
 
-                        
+                        <!-- Query Image Selection -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5><i class="fas fa-image"></i> Query Image</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="drop-zone" id="dropZone">
+                                    <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
+                                    <h5>Drop Query Image Here</h5>
+                                    <p class="text-muted">or click to browse</p>
+                                    <input type="file" id="queryImageInput" accept=".png,.jpg,.jpeg,.webp" style="display: none;">
+                                </div>
+                                
+                                <div id="queryPreview" style="display: none;">
+                                    <div class="image-preview-container">
+                                        <img id="queryImagePreview" class="query-image" src="" alt="Query Image">
+                                    </div>
+                                    <div class="image-info">
+                                        <p><strong>File:</strong> <span id="queryFilename"></span></p>
+                                    </div>
+                                </div>
+
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
+                                        <label for="numResults" class="form-label">
+                                            <i class="fas fa-list-ol"></i> Number of Results
+                                        </label>
+                                        <input type="number" class="form-control" id="numResults" 
+                                               min="1" max="20" value="5">
+                                    </div>
+                                </div>
+
+                                <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                                    <button type="button" class="btn btn-secondary me-md-2" id="clearQueryBtn">
+                                        <i class="fas fa-times"></i> Clear
+                                    </button>
+                                    <button type="button" class="btn btn-primary" id="searchBtn" disabled>
+                                        <i class="fas fa-search"></i> Search
+                                    </button>
+                                </div>
+                            </div>
                         </div>
+
+                        <!-- Search Results -->
+                        <div id="resultsContainer" style="display: none;">
+                            <div class="card">
+                                <div class="card-header bg-success text-white">
+                                    <h5><i class="fas fa-check-circle"></i> Search Results</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6>Query Image</h6>
+                                            <img id="resultQueryImage" class="query-image" src="" alt="Query Image">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6>Results Summary</h6>
+                                            <div class="alert alert-info">
+                                                Found <strong id="resultsCount">0</strong> similar images
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <h6 class="mt-4"><i class="fas fa-images"></i> Similar Images</h6>
+                                    <div id="resultsGrid" class="image-grid">
+                                        <!-- Results will be populated here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="errorContainer" class="alert alert-danger" style="display: none;">
+                            <i class="fas fa-exclamation-circle"></i> <strong>Error:</strong> <span id="errorMessage"></span>
+                        </div>
+
+                        <div id="loadingContainer" style="display: none;">
+                            <div class="text-center py-4">
+                                <div class="loading-spinner"></div>
+                                <p class="mt-2">Searching for similar images...</p>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-info-circle"></i> How to Use</h5>
+                            </div>
+                            <div class="card-body">
+                                <ol>
+                                    <li><strong>Load an Index:</strong> First, load an existing index or create one using Feature Extraction.</li>
+                                    <li><strong>Upload Query Image:</strong> Drag & drop or click to select a query image.</li>
+                                    <li><strong>Set Parameters:</strong> Choose how many similar images to retrieve.</li>
+                                    <li><strong>Search:</strong> Click Search to find similar images.</li>
+                                    <li><strong>View Results:</strong> Browse through the ranked results.</li>
+                                </ol>
+
+                                <div class="alert alert-info mt-3">
+                                    <i class="fas fa-lightbulb"></i> <strong>Tip:</strong> 
+                                    The similarity score ranges from 0 to 1, where 1 means most similar.
+                                </div>
+
+                                <div class="alert alert-warning mt-3">
+                                    <i class="fas fa-exclamation-triangle"></i> <strong>Note:</strong> 
+                                    Larger indexes may take longer to search. Consider using GPU acceleration for better performance.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h5><i class="fas fa-chart-bar"></i> System Stats</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="systemStats">
+                                    <p><i class="fas fa-spinner fa-spin"></i> Loading statistics...</p>
+                                </div>
+                            </div>
+                        </div>
+
+
                     </div>
                 </div>
             </div>
@@ -235,6 +365,7 @@
 <script>
 $(document).ready(function() {
     let currentIndex = null;
+    let currentQueryImage = null;
 
     // Load system stats
     loadSystemStats();
@@ -251,6 +382,416 @@ $(document).ready(function() {
         loadIndex(indexInfo.index_path, indexInfo.metadata_path);
     }
 
+    // Drop zone functionality
+    const dropZone = document.getElementById('dropZone');
+    const queryImageInput = document.getElementById('queryImageInput');
+    
+    // Highlight drop zone when item is dragged over it
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.add('dragover');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.remove('dragover');
+        }, false);
+    });
+
+    // Handle dropped files
+    dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles(files);
+    });
+
+    // Handle click on drop zone
+    dropZone.addEventListener('click', () => {
+        queryImageInput.click();
+    });
+
+    // Handle file selection via input
+    queryImageInput.addEventListener('change', (e) => {
+        handleFiles(e.target.files);
+    });
+
+    function handleFiles(files) {
+        if (files.length === 0) return;
+        
+        const file = files[0];
+        if (!file.type.startsWith('image/')) {
+            showAppMessage('Please select an image file (PNG, JPG, JPEG, WebP).', 'error');
+            return;
+        }
+
+        currentQueryImage = file;
+        
+        // Display preview
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            $('#queryImagePreview').attr('src', e.target.result);
+            $('#queryFilename').text(file.name);
+            $('#queryPreview').show();
+            $('#dropZone').hide();
+            $('#searchBtn').prop('disabled', false);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // Clear query button
+    $('#clearQueryBtn').click(function() {
+        currentQueryImage = null;
+        $('#queryImagePreview').attr('src', '');
+        $('#queryFilename').text('');
+        $('#queryPreview').hide();
+        $('#dropZone').show();
+        $('#searchBtn').prop('disabled', true);
+        queryImageInput.value = '';
+    });
+
+    // Load latest index
+    $('#loadLatestBtn').click(function() {
+        loadLatestIndex();
+    });
+
+    // Load index list on page load
+    loadIndexList();
+
+    // Search button
+    $('#searchBtn').click(function() {
+        if (!currentQueryImage) {
+            showAppMessage('Please select a query image first.', 'error');
+            return;
+        }
+
+        if (!currentIndex) {
+            showAppMessage('Please load an index first.', 'error');
+            return;
+        }
+
+        const numResults = parseInt($('#numResults').val());
+        
+        // Show loading
+        $('#loadingContainer').show();
+        $('#resultsContainer').hide();
+        $('#errorContainer').hide();
+        
+        // Disable buttons
+        $('#searchBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Searching...');
+        
+        // Create form data
+        const formData = new FormData();
+        formData.append('query_image', currentQueryImage);
+        formData.append('k', numResults);
+        
+        // Perform search
+        $.ajax({
+            url: '/api/search',
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(data) {
+                if (data.error) {
+                    $('#errorMessage').text(data.error);
+                    $('#errorContainer').show();
+                    return;
+                }
+
+                displayResults(data);
+            },
+            error: function(xhr, status, error) {
+                $('#errorMessage').text('Search failed: ' + error);
+                $('#errorContainer').show();
+            },
+            complete: function() {
+                $('#loadingContainer').hide();
+                $('#searchBtn').prop('disabled', false).html('<i class="fas fa-search"></i> Search');
+            }
+        });
+    });
+
+    function displayResults(data) {
+        // Show results container
+        $('#resultsContainer').show();
+        
+        // Set query image
+        $('#resultQueryImage').attr('src', $('#queryImagePreview').attr('src'));
+        
+        // Set results count
+        $('#resultsCount').text(data.results.length);
+        
+        // Clear previous results
+        $('#resultsGrid').empty();
+        
+        // Display each result
+        data.results.forEach(function(result, index) {
+            const rank = index + 1;
+            const similarityPercent = (result.similarity * 100).toFixed(1);
+            
+            // Determine similarity class based on percentage
+            let similarityClass = 'low';
+            if (similarityPercent >= 90) {
+                similarityClass = 'high';
+            } else if (similarityPercent >= 70) {
+                similarityClass = 'medium';
+            }
+            
+            const resultHtml = `
+                <div class="result-card">
+                    <div class="rank-badge">#${rank}</div>
+                    <img src="${result.path}" class="result-image" alt="Result ${rank}" 
+                         onclick="window.open('${result.path}', '_blank')">
+                    <div class="image-info">
+                        <p><strong>File:</strong> ${result.filename}</p>
+                        <p><strong>Similarity:</strong> 
+                            <span class="similarity-score ${similarityClass}">${similarityPercent}%</span>
+                        </p>
+                        <p><strong>Distance:</strong> ${result.distance.toFixed(4)}</p>
+                    </div>
+                </div>
+            `;
+            
+            $('#resultsGrid').append(resultHtml);
+        });
+    }
+
+    function loadLatestIndex() {
+        $.ajax({
+            url: '/api/list-indexes',
+            method: 'GET',
+            success: function(data) {
+                console.log('LoadLatestIndex API response:', data);
+                
+                if (data.error || !data.indexes || data.indexes.length === 0) {
+                    console.error('No indexes found for loadLatestIndex');
+                    showAppMessage('No indexes found.', 'error');
+                    return;
+                }
+
+                // Get the most recent index (last modified)
+                const latestIndex = data.indexes.reduce((latest, current) => {
+                    return new Date(current.modified) > new Date(latest.modified) ? current : latest;
+                }, data.indexes[0]);
+                
+                console.log('Latest index:', latestIndex);
+
+                // Pass just the filenames, not the full paths
+                loadIndex(latestIndex.name, latestIndex.metadata);
+            },
+            error: function(xhr, status, error) {
+                console.error('LoadLatestIndex AJAX error:', status, error);
+                showAppMessage('Failed to load indexes: ' + error, 'error');
+            }
+        });
+    }
+
+    function loadIndexList() {
+        $.ajax({
+            url: '/api/list-indexes',
+            method: 'GET',
+            success: function(data) {
+                console.log('API response:', data);
+                
+                if (data.error) {
+                    console.error('API error:', data.error);
+                    $('#indexListContainer').html('<p class="text-danger">' + data.error + '</p>');
+                    return;
+                }
+
+                if (!data.indexes || data.indexes.length === 0) {
+                    console.log('No indexes returned from API');
+                    $('#indexListContainer').html('<p class="text-muted">No indexes found.</p>');
+                    return;
+                }
+
+                console.log('Found indexes:', data.indexes);
+                
+                let html = '';
+                data.indexes.forEach(function(index) {
+                    const date = new Date(index.modified);
+                    const isActive = currentIndex && currentIndex.name === index.name;
+                    const activeClass = isActive ? 'active' : '';
+                    const numImages = index.num_images !== undefined ? index.num_images : 'N/A';
+                    const isActive = currentIndex && currentIndex.name === index.name;
+                    const activeBadge = isActive ? '<span class="active-badge">Active</span>' : '';
+                    html += `
+                        <a href="#" class="list-group-item list-group-item-action index-item ${activeClass}" 
+                           data-index="${index.name}" data-metadata="${index.metadata}">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${index.name}${activeBadge}</h6>
+                                <div>
+                                    <small class="me-2">${date.toLocaleString()}</small>
+                                    <div class="index-actions d-inline-block">
+                                        <button class="btn btn-sm btn-outline-success load-btn" data-index="${index.name}" data-metadata="${index.metadata}" title="Load Index">
+                                            <i class="fas fa-play"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger delete-btn" data-index="${index.name}" data-metadata="${index.metadata}" title="Delete Index">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="mb-1">Size: ${formatFileSize(index.size)} | Images: ${numImages}</p>
+                        </a>
+                    `;
+                });
+                
+                $('#indexListContainer').html(html);
+                console.log('Index list HTML updated with', data.indexes.length, 'indexes');
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error:', status, error);
+                $('#indexListContainer').html('<p class="text-danger">Failed to load indexes: ' + error + '</p>');
+            }
+        });
+    }
+
+    function loadIndex(indexName, metadataName) {
+        // Send just the filenames without the /indexes/ prefix
+        // The server will construct the full path
+        const indexPath = indexName;
+        const metadataPath = metadataName;
+        
+        $.ajax({
+            url: '/api/load-index',
+            method: 'POST',
+            data: {
+                index_path: indexPath,
+                metadata_path: metadataPath
+            },
+            success: function(data) {
+                if (data.error) {
+                    showAppMessage(data.error, 'error');
+                    return;
+                }
+
+                currentIndex = {
+                    name: indexName,
+                    size: data.num_images
+                };
+
+                // Update UI
+                $('#noIndexAlert').hide();
+                $('#indexLoadSuccess').show();
+                $('#searchBtn').prop('disabled', currentQueryImage === null);
+                
+                // Save active index to localStorage
+                localStorage.setItem('activeIndex', JSON.stringify({
+                    name: indexName,
+                    metadata: metadataName
+                }));
+                
+                // Refresh index list to show active state
+                loadIndexList();
+            },
+            error: function(xhr, status, error) {
+                showAppMessage('Failed to load index: ' + error, 'error');
+            }
+        });
+    }
+
+    function checkIndexStatus() {
+        $.ajax({
+            url: '/api/stats',
+            method: 'GET',
+            success: function(data) {
+                if (data.error) {
+                    // No index loaded
+                    $('#indexInfo').hide();
+                    $('#noIndexAlert').show();
+                    return;
+                }
+
+                if (data.num_images && data.num_images > 0) {
+                    currentIndex = {
+                        name: 'Current Index',
+                        size: data.num_images
+                    };
+                    $('#currentIndexName').text('Current Index');
+                    $('#currentIndexSize').text(data.num_images);
+                    $('#indexInfo').show();
+                    $('#noIndexAlert').hide();
+                } else {
+                    $('#indexInfo').hide();
+                    $('#noIndexAlert').show();
+                }
+            },
+            error: function(xhr, status, error) {
+                $('#indexInfo').hide();
+                $('#noIndexAlert').show();
+            }
+        });
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function loadSystemStats() {
+        $.ajax({
+            url: '/api/stats',
+            method: 'GET',
+            success: function(data) {
+                if (data.error) {
+                    $('#systemStats').html('<p class="text-danger">' + data.error + '</p>');
+                    return;
+                }
+
+                let statsHtml = '<ul class="list-group list-group-flush">';
+                if (data.num_images !== undefined) {
+                    statsHtml += '<li class="list-group-item"><strong>Indexed Images:</strong> ' + data.num_images + '</li>';
+                }
+                if (data.feature_dimension !== undefined) {
+                    statsHtml += '<li class="list-group-item"><strong>Feature Dimension:</strong> ' + data.feature_dimension + '</li>';
+                }
+                if (data.gpu_enabled !== undefined) {
+                    statsHtml += '<li class="list-group-item"><strong>GPU Enabled:</strong> ' + (data.gpu_enabled ? 'Yes' : 'No') + '</li>';
+                }
+                statsHtml += '</ul>';
+                
+                $('#systemStats').html(statsHtml);
+            },
+            error: function(xhr, status, error) {
+                $('#systemStats').html('<p class="text-danger">Error loading stats: ' + error + '</p>');
+            }
+        });
+    }
+
+    // View all indexes button
+    $('#viewAllIndexesBtn').click(function() {
+        $('#indexList').show();
+        loadIndexList();
+    });
+
+    // Delete index button
+    $('#deleteIndexBtn').click(function() {
+        if (!currentIndex) {
+            showAppMessage('No index selected.', 'error');
+            return;
+        }
+        
+        if (confirm('Are you sure you want to delete the current index?')) {
+            // Implementation would go here
+            showAppMessage('Index deletion not yet implemented.', 'warning');
+        }
+    });
+
+    // Event delegation for dynamically loaded index items
     $(document).on('click', '.index-item', function() {
         const indexName = $(this).data('index');
         const metadataName = $(this).data('metadata');
@@ -312,5 +853,4 @@ $(document).ready(function() {
     }
 });
 </script>
-
 {% endblock %}

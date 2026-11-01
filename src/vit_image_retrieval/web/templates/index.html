@@ -11,7 +11,7 @@
             </div>
             <div class="card-body">
                 <div class="row">
-                    <div class="col-md-6 mb-4">
+                    <div class="col-md-4 mb-4">
                         <div class="card h-100">
                             <div class="card-body text-center">
                                 <i class="fas fa-cog fa-3x text-primary mb-3"></i>
@@ -26,7 +26,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6 mb-4">
+                    <div class="col-md-4 mb-4">
                         <div class="card h-100">
                             <div class="card-body text-center">
                                 <i class="fas fa-search fa-3x text-primary mb-3"></i>
@@ -37,6 +37,21 @@
                                 </p>
                                 <a href="{{ url_for('image_retrieval') }}" class="btn btn-primary">
                                     <i class="fas fa-arrow-right"></i> Go to Image Retrieval
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-4">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <i class="fas fa-database fa-3x text-primary mb-3"></i>
+                                <h4 class="card-title">Index Management</h4>
+                                <p class="card-text">
+                                    Manage your existing indexes. Load, view, and delete indexes as needed.
+                                    Keep your image collection organized and up-to-date.
+                                </p>
+                                <a href="{{ url_for('index_management') }}" class="btn btn-primary">
+                                    <i class="fas fa-arrow-right"></i> Go to Index Management
                                 </a>
                             </div>
                         </div>

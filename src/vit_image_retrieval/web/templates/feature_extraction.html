@@ -345,10 +345,11 @@ $(document).ready(function() {
 
     // Set up navigation interceptors to avoid browser's native dialog
     let navigationBlocked = false;
+    let processingActuallyStarted = false;
     
     // Intercept all click events on the document
     $(document).on('click', function(e) {
-        if (processingInProgress && !leaveModalShown) {
+        if (processingActuallyStarted && !leaveModalShown) {
             // Check if the click is on a navigation element
             const target = $(e.target);
             const isLink = target.is('a') || target.parents('a').length > 0;
@@ -358,7 +359,7 @@ $(document).ready(function() {
             if (isLink || isButton || isFormSubmit) {
                 // Check if it's one of our buttons that should be allowed
                 const isAllowedButton = target.attr('id') === 'cancelBtn' || 
-                                       target.attr('id') === 'newExtractionBtn' ||
+                                       target.attr('id') === 'goToRetrievalBtn' ||
                                        target.parents('.modal').length > 0;
                 
                 if (!isAllowedButton) {
@@ -375,7 +376,7 @@ $(document).ready(function() {
     
     // Also intercept form submissions
     $(document).on('submit', 'form', function(e) {
-        if (processingInProgress && !leaveModalShown) {
+        if (processingActuallyStarted && !leaveModalShown) {
             e.preventDefault();
             $('#leaveConfirmModal').modal('show');
             leaveModalShown = true;
@@ -386,7 +387,7 @@ $(document).ready(function() {
     // Intercept history navigation
     history.pushState = (function(original) {
         return function() {
-            if (processingInProgress && !leaveModalShown) {
+            if (processingActuallyStarted && !leaveModalShown) {
                 $('#leaveConfirmModal').modal('show');
                 leaveModalShown = true;
                 return original.apply(this, arguments);
@@ -396,7 +397,7 @@ $(document).ready(function() {
     })(history.pushState);
     
     window.addEventListener('popstate', function(e) {
-        if (processingInProgress && !leaveModalShown) {
+        if (processingActuallyStarted && !leaveModalShown) {
             $('#leaveConfirmModal').modal('show');
             leaveModalShown = true;
             // Prevent the popstate from actually navigating
@@ -532,6 +533,7 @@ $(document).ready(function() {
             $('#processedCount').text('Extraction cancelled');
             $('#progressContainer').hide();
             processingInProgress = false;
+            processingActuallyStarted = false;
         }
         
         // Reset the form
@@ -584,6 +586,7 @@ $(document).ready(function() {
             $('#processedCount').text('Uploading files...');
             
             // Set processing flag
+            processingActuallyStarted = true;
             processingInProgress = true;
             
             // Store reference to xhr for cancellation
@@ -651,6 +654,7 @@ $(document).ready(function() {
                     $('#cancelBtn').prop('disabled', false);
                     extractionXhr = null;
                     processingInProgress = false;
+                    processingActuallyStarted = false;
                 }
             });
             
