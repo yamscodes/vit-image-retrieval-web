@@ -387,7 +387,7 @@ $(document).ready(function() {
         
         const file = files[0];
         if (!file.type.startsWith('image/')) {
-            alert('Please select an image file (PNG, JPG, JPEG, WebP).');
+            showAppMessage('Please select an image file (PNG, JPG, JPEG, WebP).', 'error');
             return;
         }
 
@@ -430,18 +430,19 @@ $(document).ready(function() {
 
     // Refresh index list
     $('#refreshIndexesBtn').click(function() {
+        $('#indexList').show();
         loadIndexList();
     });
 
     // Search button
     $('#searchBtn').click(function() {
         if (!currentQueryImage) {
-            alert('Please select a query image first.');
+            showAppMessage('Please select a query image first.', 'error');
             return;
         }
 
         if (!currentIndex) {
-            alert('Please load an index first.');
+            showAppMessage('Please load an index first.', 'error');
             return;
         }
 
@@ -631,7 +632,7 @@ $(document).ready(function() {
                 $('#indexList').hide();
                 
                 // Show success message
-                alert('Index loaded successfully! Ready to search.');
+                showAppMessage('Index loaded successfully! Ready to search.', 'success');
             },
             error: function(xhr, status, error) {
                 $('#errorMessage').text('Failed to load index: ' + error);
@@ -720,13 +721,13 @@ $(document).ready(function() {
     // Delete index button
     $('#deleteIndexBtn').click(function() {
         if (!currentIndex) {
-            alert('No index selected.');
+            showAppMessage('No index selected.', 'error');
             return;
         }
         
         if (confirm('Are you sure you want to delete the current index?')) {
             // Implementation would go here
-            alert('Index deletion not yet implemented.');
+            showAppMessage('Index deletion not yet implemented.', 'warning');
         }
     });
 });

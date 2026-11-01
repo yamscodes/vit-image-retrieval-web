@@ -185,83 +185,103 @@ def register_routes(app):
             # Get index name
             index_name = request.form.get('index_name', '').strip()
             
-            # Save uploaded files to a temporary directory
+            # Save uploaded files to a temporary directory first
             import tempfile
+            import shutil
             temp_dir = tempfile.mkdtemp(prefix='vit_extract_')
             
-            try:
-                saved_paths = []
-                for file in files:
-                    if file.filename == '':
-                        continue
-                    if not allowed_file(file.filename):
-                        continue
-                    
-                    # Save file to temp directory
-                    filename = werkzeug.utils.secure_filename(file.filename)
-                    save_path = os.path.join(temp_dir, filename)
-                    file.save(save_path)
-                    saved_paths.append(save_path)
+            saved_paths = []
+            for file in files:
+                if file.filename == '':
+                    continue
+                if not allowed_file(file.filename):
+                    continue
                 
-                if not saved_paths:
-                    return jsonify({'error': 'No valid image files found'}), 400
-                
-                # Create retrieval system
-                rs = ImageRetrievalSystem(
-                    feature_extractor=ImageFeatureExtractor()
-                )
-                
-                # Process images
-                def progress_callback(value):
-                    logger.info(f"Progress: {value}%")
-                
-                rs.index_images(temp_dir, progress_callback=progress_callback)
-                
-                # Generate index filenames
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                if index_name:
-                    index_name = ''.join(c if c.isalnum() else '_' for c in index_name)
-                    index_file = f"index_{index_name}_{timestamp}.faiss"
-                    metadata_file = f"metadata_{index_name}_{timestamp}.json"
+                # Save file to temp directory
+                filename = werkzeug.utils.secure_filename(file.filename)
+                save_path = os.path.join(temp_dir, filename)
+                file.save(save_path)
+                saved_paths.append(save_path)
+            
+            if not saved_paths:
+                return jsonify({'error': 'No valid image files found'}), 400
+            
+            # Create retrieval system
+            rs = ImageRetrievalSystem(
+                feature_extractor=ImageFeatureExtractor()
+            )
+            
+            # Process images from temp directory
+            def progress_callback(value):
+                logger.info(f"Progress: {value}%")
+            
+            rs.index_images(temp_dir, progress_callback=progress_callback)
+            
+            # Move files from temp to uploads directory
+            upload_dir = app.config['UPLOAD_FOLDER']
+            os.makedirs(upload_dir, exist_ok=True)
+            for path in saved_paths:
+                filename = os.path.basename(path)
+                dest_path = os.path.join(upload_dir, filename)
+                if not os.path.exists(dest_path):
+                    shutil.move(path, dest_path)
                 else:
-                    index_file = f"index_{timestamp}.faiss"
-                    metadata_file = f"metadata_{timestamp}.json"
-                
-                # Save index to the configured folder
-                index_path = os.path.join(app.config['INDEX_FOLDER'], index_file)
-                metadata_path = os.path.join(app.config['INDEX_FOLDER'], metadata_file)
-                
-                # Ensure index folder exists
-                os.makedirs(app.config['INDEX_FOLDER'], exist_ok=True)
-                
-                rs.save(index_path, metadata_path)
-                
-                # Verify files were created
-                logger.info(f"Index saved to: {index_path}")
-                logger.info(f"Metadata saved to: {metadata_path}")
-                logger.info(f"Index folder contents: {os.listdir(app.config['INDEX_FOLDER'])}")
-                
-                # Set the global retrieval system to this newly created index
-                global retrieval_system, using_extracted_index
-                retrieval_system = rs
-                using_extracted_index = True
-                
-                # Return relative paths for the client
-                return jsonify({
-                    'success': True,
-                    'index_path': index_file,
-                    'metadata_path': metadata_file,
-                    'num_images': len(rs.metadata),
-                    'full_index_path': index_path,
-                    'full_metadata_path': metadata_path
-                })
-            finally:
-                # Clean up temp directory
-                import shutil
-                try:
-                    shutil.rmtree(temp_dir)
-                except Exception as e:
-                    logger.warning(f"Failed to clean up temp directory: {e}")
+                    # File already exists, just clean up temp
+                    try:
+                        os.remove(path)
+                    except:
+                        pass
+            
+            # Update metadata paths to point to uploads directory
+            for idx in list(rs.metadata.keys()):
+                old_path = rs.metadata[idx]['path']
+                filename = os.path.basename(old_path)
+                rs.metadata[idx]['path'] = os.path.join(upload_dir, filename)
+            
+            # Generate index filenames
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            if index_name:
+                index_name = ''.join(c if c.isalnum() else '_' for c in index_name)
+                index_file = f"index_{index_name}_{timestamp}.faiss"
+                metadata_file = f"metadata_{index_name}_{timestamp}.json"
+            else:
+                index_file = f"index_{timestamp}.faiss"
+                metadata_file = f"metadata_{timestamp}.json"
+            
+            # Save index to the configured folder
+            index_path = os.path.join(app.config['INDEX_FOLDER'], index_file)
+            metadata_path = os.path.join(app.config['INDEX_FOLDER'], metadata_file)
+            
+            # Ensure index folder exists
+            os.makedirs(app.config['INDEX_FOLDER'], exist_ok=True)
+            
+            rs.save(index_path, metadata_path)
+            
+            # Verify files were created
+            logger.info(f"Index saved to: {index_path}")
+            logger.info(f"Metadata saved to: {metadata_path}")
+            logger.info(f"Index folder contents: {os.listdir(app.config['INDEX_FOLDER'])}")
+            
+            # Set the global retrieval system to this newly created index
+            global retrieval_system, using_extracted_index
+            retrieval_system = rs
+            using_extracted_index = True
+            
+            # Clean up temp directory
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception as e:
+                logger.warning(f"Failed to clean up temp directory: {e}")
+            
+            # Return relative paths for the client
+            return jsonify({
+                'success': True,
+                'index_path': index_file,
+                'metadata_path': metadata_file,
+                'num_images': len(rs.metadata),
+                'full_index_path': index_path,
+                'full_metadata_path': metadata_path
+            })
         except Exception as e:
             logger.error(f"Error in feature extraction from files: {str(e)}")
             import traceback
@@ -467,13 +487,26 @@ def register_routes(app):
             
             # Format results - return file paths relative to uploads folder for web access
             formatted_results = []
+            upload_dir = app.config['UPLOAD_FOLDER']
             for path, similarity, metadata in results:
-                # Make path relative to uploads folder for web serving
-                if path.startswith(app.config['UPLOAD_FOLDER']):
-                    web_path = '/uploads/' + os.path.basename(path)
+                # Get the filename from the path
+                filename = os.path.basename(path)
+                
+                # Construct web-accessible path
+                # The metadata path should already point to upload_dir after extraction
+                # But we need to make it a URL path
+                if path.startswith(upload_dir):
+                    # Path is already in uploads directory
+                    web_path = '/uploads/' + filename
                 else:
-                    # For paths from the index, use as-is
-                    web_path = path
+                    # Try to find the file in uploads directory
+                    upload_path = os.path.join(upload_dir, filename)
+                    if os.path.exists(upload_path):
+                        web_path = '/uploads/' + filename
+                    else:
+                        # File doesn't exist in uploads, use filename directly
+                        # This handles cases where original files were indexed from elsewhere
+                        web_path = '/uploads/' + filename
                 
                 formatted_results.append({
                     'path': web_path,
@@ -541,11 +574,6 @@ def register_routes(app):
                 return jsonify({'error': 'Retrieval system not initialized'}), 500
         except Exception as e:
             return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/search', methods=['POST'])
-    def api_search_duplicate():
-        """Duplicate route - remove this and use the one above"""
-        pass
 
     @app.route('/uploads/<filename>')
     def uploaded_file(filename):

@@ -564,7 +564,7 @@ $(document).ready(function() {
         e.preventDefault();
         
         if (uploadedFiles.length === 0) {
-            alert('Please upload at least one image first.');
+            showAppMessage('Please upload at least one image first.', 'error');
             return;
         }
 
@@ -691,7 +691,7 @@ $(document).ready(function() {
         if (window.currentIndexInfo) {
             showIndexInfo(window.currentIndexInfo);
         } else {
-            alert('No index information available.');
+            showAppMessage('No index information available.', 'error');
         }
     });
 
