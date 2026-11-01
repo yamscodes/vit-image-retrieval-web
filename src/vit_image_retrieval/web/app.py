@@ -348,32 +348,65 @@ def register_routes(app):
         Where <identifier> can contain underscores (e.g., "abc_20261031_121805")
         """
         try:
+            # Primary index folder from config
             index_folder = app.config['INDEX_FOLDER']
             
-            # Debug logging
-            logger.info(f"Looking for indexes in: {index_folder}")
-            logger.info(f"Index folder exists: {os.path.exists(index_folder)}")
+            # Also check common alternative locations
+            # Sometimes indexes are created in the current working directory
+            # or in a different relative path
+            search_folders = [
+                index_folder,
+                os.path.join(os.getcwd(), 'indexes'),
+                os.path.abspath('indexes'),
+            ]
             
-            # Ensure index folder exists
+            # Remove duplicates while preserving order
+            unique_folders = []
+            for folder in search_folders:
+                if folder not in unique_folders:
+                    unique_folders.append(folder)
+            
+            logger.info(f"Searching for indexes in folders: {unique_folders}")
+            
+            # Collect all faiss and json files from all search folders
+            all_faiss_files = []
+            all_json_files = []
+            folder_with_files = None
+            
+            for folder in unique_folders:
+                logger.info(f"Checking folder: {folder}")
+                if os.path.exists(folder):
+                    try:
+                        files = os.listdir(folder)
+                        logger.info(f"  Found {len(files)} files in {folder}")
+                        if files:
+                            folder_with_files = folder
+                            faiss_in_folder = [f for f in files if f.endswith('.faiss')]
+                            json_in_folder = [f for f in files if f.endswith('.json')]
+                            all_faiss_files.extend(faiss_in_folder)
+                            all_json_files.extend(json_in_folder)
+                            logger.info(f"  .faiss files: {faiss_in_folder}")
+                            logger.info(f"  .json files: {json_in_folder}")
+                    except PermissionError:
+                        logger.warning(f"Permission denied reading folder: {folder}")
+                else:
+                    logger.info(f"  Folder does not exist: {folder}")
+            
+            # If we found files in an alternative folder, update the index folder
+            if folder_with_files and folder_with_files != index_folder:
+                logger.warning(f"Using alternative index folder: {folder_with_files}")
+                index_folder = folder_with_files
+            
+            # Ensure primary index folder exists
             if not os.path.exists(index_folder):
                 os.makedirs(index_folder, exist_ok=True)
                 logger.info(f"Created index folder at: {index_folder}")
-                return jsonify({'indexes': []})
             
-            # Get all files in index folder
-            try:
-                all_files = os.listdir(index_folder)
-            except PermissionError:
-                logger.error(f"Permission denied reading index folder: {index_folder}")
-                return jsonify({'error': f'Permission denied reading index folder: {index_folder}'}), 500
+            logger.info(f"Total .faiss files found: {len(all_faiss_files)}: {all_faiss_files}")
+            logger.info(f"Total .json files found: {len(all_json_files)}: {all_json_files}")
             
-            logger.info(f"All files in index folder: {all_files}")
-            
-            faiss_files = [f for f in all_files if f.endswith('.faiss')]
-            json_files = [f for f in all_files if f.endswith('.json')]
-            
-            logger.info(f"Found {len(faiss_files)} .faiss files: {faiss_files}")
-            logger.info(f"Found {len(json_files)} .json files: {json_files}")
+            faiss_files = all_faiss_files
+            json_files = all_json_files
             
             # Pair .faiss and .json files
             # Strategy: For each .faiss file starting with 'index_', 
