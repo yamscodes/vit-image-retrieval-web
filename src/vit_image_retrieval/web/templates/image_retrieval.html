@@ -153,6 +153,7 @@
     
     .index-item.active {
         background-color: #e3f2fd !important;
+        color: #003366 !important;
     }
     
     .index-item:hover .index-actions {
@@ -204,27 +205,9 @@
                                 <h5><i class="fas fa-database"></i> Index Selection</h5>
                             </div>
                             <div class="card-body">
-                                <div id="indexInfo" class="index-info" style="display: none;">
-                                    <h6><i class="fas fa-info-circle"></i> Current Index</h6>
-                                    <p><strong>Index:</strong> <span id="currentIndexName">None</span></p>
-                                    <p><strong>Images:</strong> <span id="currentIndexSize">0</span></p>
-                                </div>
-                                
                                 <div class="alert alert-info" id="noIndexAlert">
                                     <i class="fas fa-exclamation-circle"></i> No index loaded. 
                                     Please extract features first or load an existing index.
-                                </div>
-                                
-                                <div class="d-grid gap-2 d-md-flex">
-                                    <button type="button" class="btn btn-primary me-md-2" id="loadLatestBtn">
-                                        <i class="fas fa-download"></i> Load Latest Index
-                                    </button>
-                                    <button type="button" class="btn btn-secondary me-md-2" id="loadSpecificBtn">
-                                        <i class="fas fa-folder-open"></i> Load Specific Index
-                                    </button>
-                                    <button type="button" class="btn btn-info" id="refreshIndexesBtn">
-                                        <i class="fas fa-sync-alt"></i> Refresh Index List
-                                    </button>
                                 </div>
                                 
                                 <div id="indexList" class="mt-3">
@@ -463,21 +446,6 @@ $(document).ready(function() {
     // Load index list on page load
     loadIndexList();
 
-    // Load specific index
-    $('#loadSpecificBtn').click(function() {
-        loadIndexList();
-    });
-
-    // Refresh index list
-    $('#refreshIndexesBtn').click(function() {
-        loadIndexList();
-    });
-
-    // View all indexes button
-    $('#viewAllIndexesBtn').click(function() {
-        loadIndexList();
-    });
-
     // Search button
     $('#searchBtn').click(function() {
         if (!currentQueryImage) {
@@ -639,17 +607,19 @@ $(document).ready(function() {
                            data-index="${index.name}" data-metadata="${index.metadata}">
                             <div class="d-flex w-100 justify-content-between">
                                 <h6 class="mb-1">${index.name}</h6>
-                                <small>${date.toLocaleString()}</small>
+                                <div>
+                                    <div class="index-actions d-inline-block me-2">
+                                        <button class="btn btn-sm btn-outline-success load-btn" data-index="${index.name}" data-metadata="${index.metadata}" title="Load Index">
+                                            <i class="fas fa-play"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger delete-btn" data-index="${index.name}" data-metadata="${index.metadata}" title="Delete Index">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                    <small>${date.toLocaleString()}</small>
+                                </div>
                             </div>
                             <p class="mb-1">Size: ${formatFileSize(index.size)} | Images: ${numImages}</p>
-                            <div class="index-actions">
-                                <button class="btn btn-sm btn-outline-success load-btn" data-index="${index.name}" data-metadata="${index.metadata}" title="Load Index">
-                                    <i class="fas fa-play"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger delete-btn" data-index="${index.name}" data-metadata="${index.metadata}" title="Delete Index">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
                         </a>
                     `;
                 });
