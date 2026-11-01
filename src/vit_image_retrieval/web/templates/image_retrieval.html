@@ -635,7 +635,6 @@ $(document).ready(function() {
                     const isActive = currentIndex && currentIndex.name === index.name;
                     const activeClass = isActive ? 'active' : '';
                     const numImages = index.num_images !== undefined ? index.num_images : 'N/A';
-                    const isActive = currentIndex && currentIndex.name === index.name;
                     const activeBadge = isActive ? '<span class="active-badge">Active</span>' : '';
                     html += `
                         <a href="#" class="list-group-item list-group-item-action index-item ${activeClass}" 
