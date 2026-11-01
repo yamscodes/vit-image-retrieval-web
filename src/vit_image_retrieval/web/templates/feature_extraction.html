@@ -226,8 +226,8 @@
                                         <button type="button" class="btn btn-primary me-md-2" id="viewIndexBtn">
                                             <i class="fas fa-eye"></i> View Index Info
                                         </button>
-                                        <button type="button" class="btn btn-secondary" id="newExtractionBtn">
-                                            <i class="fas fa-plus"></i> New Extraction
+                                        <button type="button" class="btn btn-success" id="goToRetrievalBtn">
+                                            <i class="fas fa-search"></i> Go to Image Retrieval
                                         </button>
                                     </div>
                                 </div>
@@ -566,9 +566,6 @@ $(document).ready(function() {
         $('#extractBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
         $('#cancelBtn').prop('disabled', false);
         
-        // Set processing flag
-        processingInProgress = true;
-        
         // Start timer
         startTime = new Date();
         
@@ -585,6 +582,9 @@ $(document).ready(function() {
             // Update progress
             $('#progressBar').css('width', '10%').text('10%');
             $('#processedCount').text('Uploading files...');
+            
+            // Set processing flag
+            processingInProgress = true;
             
             // Store reference to xhr for cancellation
             extractionXhr = $.ajax({
@@ -727,15 +727,17 @@ $(document).ready(function() {
         });
     }
 
-    // New extraction button
-    $('#newExtractionBtn').click(function() {
-        uploadedFiles = [];
-        updateFileList();
-        imagesInput.value = '';
-        $('#indexName').val('');
-        $('#progressContainer').hide();
-        $('#resultContainer').hide();
-        $('#errorContainer').hide();
+    // Go to Image Retrieval button - loads the newly created index
+    $('#goToRetrievalBtn').click(function() {
+        if (window.currentIndexInfo) {
+            // Store the index info to be loaded on the retrieval page
+            localStorage.setItem('indexToLoad', JSON.stringify({
+                index_path: window.currentIndexInfo.index_path,
+                metadata_path: window.currentIndexInfo.metadata_path
+            }));
+        }
+        // Navigate to image retrieval page
+        window.location.href = '/image-retrieval';
     });
 
 

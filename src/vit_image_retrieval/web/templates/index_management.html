@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}ViT Image Retrieval - Index Management{% endblock %}
+
+{% block extra_css %}
+<style>
+    .result-container {
+        margin-top: 20px;
+        padding: 20px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        background: #fafafa;
+    }
+    
+    .query-image {
+        max-width: 300px;
+        max-height: 300px;
+        border: 2px solid #28a745;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .result-image {
+        max-width: 200px;
+        max-height: 200px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        transition: transform 0.2s, box-shadow 0.2s;
+        cursor: pointer;
+    }
+    
+    .result-image:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        border-color: #28a745;
+    }
+    
+    .result-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .result-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .rank-badge {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: #28a745;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 0.9em;
+        z-index: 10;
+    }
+    
+    .similarity-score {
+        background: #f8f9fa;
+        padding: 8px 12px;
+        border-radius: 4px;
+        font-weight: bold;
+    }
+    .similarity-score.high {
+        color: #28a745;
+    }
+    .similarity-score.medium {
+        color: #ffc107;
+    }
+    .similarity-score.low {
+        color: #dc3545;
+    }
+    
+    .image-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+    }
+    
+    .drop-zone {
+        border: 2px dashed #ccc;
+        border-radius: 8px;
+        padding: 40px;
+        text-align: center;
+        background: #f8f9fa;
+        cursor: pointer;
+        transition: all 0.3s;
+        margin: 20px 0;
+    }
+    
+    .drop-zone:hover {
+        border-color: #28a745;
+        background: #e9ecef;
+    }
+    
+    .drop-zone.dragover {
+        border-color: #28a745;
+        background: #d4edda;
+    }
+    
+    .image-preview-container {
+        position: relative;
+        margin-bottom: 15px;
+    }
+    
+    .image-info {
+        margin-top: 10px;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        font-size: 0.9em;
+    }
+    
+    .loading-spinner {
+        display: inline-block;
+        width: 40px;
+        height: 40px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #28a745;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .index-info {
+        background: #e3f2fd;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #2196f3;
+    }
+    
+    .index-list-container {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .index-item {
+        position: relative;
+        transition: background-color 0.2s;
+    }
+    
+    .index-item.active {
+        background-color: #e3f2fd !important;
+        color: #003366 !important;
+    }
+    
+    .index-actions {
+        display: inline-block;
+        position: relative;
+        top: 0;
+        transform: none;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        box-shadow: none;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 5px;
+        border-radius: 5px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        z-index: 10;
+    }
+    
+    .index-actions .btn {
+        padding: 3px 8px;
+        margin: 0 2px;
+        font-size: 0.8em;
+    }
+    
+    .index-actions .load-btn {
+        color: #28a745;
+    }
+    
+    .index-actions .delete-btn {
+        color: #dc3545;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3><i class="fas fa-database"></i> Index Management</h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <!-- Index Selection Section -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5><i class="fas fa-list"></i> Index Management</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info" id="noIndexAlert">
+                                    <i class="fas fa-exclamation-circle"></i> No index loaded. 
+                                    Manage your indexes here.
+                                </div>
+                                <div class="alert alert-success" id="indexLoadSuccess" style="display: none;">
+                                    <i class="fas fa-check-circle"></i> Index loaded successfully!
+                                </div>
+                                
+                                <div id="indexList" class="mt-3">
+                                    <h6><i class="fas fa-list"></i> Available Indexes</h6>
+                                    <div class="list-group index-list-container" id="indexListContainer">
+                                        <p class="text-muted">Loading indexes...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    let currentIndex = null;
+
+    // Load system stats
+    loadSystemStats();
+    
+    // Check if we have an index loaded
+    checkIndexStatus();
+
+    // Check if there's an index to load from localStorage (from feature extraction)
+    const indexToLoad = localStorage.getItem('indexToLoad');
+    if (indexToLoad) {
+        const indexInfo = JSON.parse(indexToLoad);
+        localStorage.removeItem('indexToLoad');
+        // Load this index
+        loadIndex(indexInfo.index_path, indexInfo.metadata_path);
+    }
+
+    $(document).on('click', '.index-item', function() {
+        const indexName = $(this).data('index');
+        const metadataName = $(this).data('metadata');
+        loadIndex(indexName, metadataName);
+    });
+
+    // Event delegation for load buttons on index items
+    $(document).on('click', '.index-actions .load-btn', function(e) {
+        e.stopPropagation();
+        const indexName = $(this).data('index');
+        const metadataName = $(this).data('metadata');
+        loadIndex(indexName, metadataName);
+    });
+
+    // Event delegation for delete buttons on index items
+    $(document).on('click', '.index-actions .delete-btn', function(e) {
+        e.stopPropagation();
+        const indexName = $(this).data('index');
+        const metadataName = $(this).data('metadata');
+        
+        // Show custom modal instead of browser confirm
+        showConfirmModal('Delete Index', 'Are you sure you want to delete index: ' + indexName + '?', function() {
+            deleteIndex(indexName, metadataName);
+        });
+    });
+
+    function deleteIndex(indexName, metadataName) {
+        $.ajax({
+            url: '/api/delete-index',
+            method: 'POST',
+            data: {
+                index_name: indexName,
+                metadata_name: metadataName
+            },
+            success: function(data) {
+                if (data.error) {
+                    showAppMessage(data.error, 'error');
+                    return;
+                }
+                
+                // Refresh the index list
+                loadIndexList();
+                
+                // If this was the current index, clear it
+                if (currentIndex && currentIndex.name === indexName) {
+                    currentIndex = null;
+                    $('#currentIndexName').text('None');
+                    $('#currentIndexSize').text('0');
+                    $('#indexInfo').hide();
+                    $('#noIndexAlert').show();
+                }
+                
+                showAppMessage('Index deleted successfully!', 'success');
+            },
+            error: function(xhr, status, error) {
+                showAppMessage('Failed to delete index: ' + error, 'error');
+            }
+        });
+    }
+});
+</script>
+
+{% endblock %}

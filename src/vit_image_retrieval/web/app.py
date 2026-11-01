@@ -110,6 +110,11 @@ def register_routes(app):
     def image_retrieval():
         """Image retrieval page."""
         return render_template('image_retrieval.html')
+
+    @app.route('/index-management')
+    def index_management():
+        """Index management page."""
+        return render_template('index_management.html')
     
     # API Routes
     
