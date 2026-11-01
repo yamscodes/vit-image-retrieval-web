@@ -792,16 +792,22 @@ $(document).ready(function() {
             url: '/api/list-indexes',
             method: 'GET',
             success: function(data) {
+                console.log('Feature extraction - loadAvailableIndexes API response:', data);
+                
                 if (data.error) {
+                    console.error('Feature extraction - API error:', data.error);
                     $('#availableIndexes').html('<p class="text-danger">' + data.error + '</p>');
                     return;
                 }
 
                 if (!data.indexes || data.indexes.length === 0) {
+                    console.log('Feature extraction - No indexes returned');
                     $('#availableIndexes').html('<p class="text-muted">No indexes available</p>');
                     return;
                 }
 
+                console.log('Feature extraction - Found indexes:', data.indexes);
+                
                 let html = '<div class="list-group list-group-flush">';
                 data.indexes.forEach(function(index) {
                     const date = new Date(index.modified);
@@ -818,8 +824,10 @@ $(document).ready(function() {
                 html += '</div>';
                 
                 $('#availableIndexes').html(html);
+                console.log('Feature extraction - Index list updated with', data.indexes.length, 'indexes');
             },
             error: function(xhr, status, error) {
+                console.error('Feature extraction - AJAX error:', status, error);
                 $('#availableIndexes').html('<p class="text-danger">Error loading indexes: ' + error + '</p>');
             }
         });

@@ -550,7 +550,10 @@ $(document).ready(function() {
             url: '/api/list-indexes',
             method: 'GET',
             success: function(data) {
+                console.log('LoadLatestIndex API response:', data);
+                
                 if (data.error || !data.indexes || data.indexes.length === 0) {
+                    console.error('No indexes found for loadLatestIndex');
                     showAppMessage('No indexes found.', 'error');
                     return;
                 }
@@ -559,11 +562,14 @@ $(document).ready(function() {
                 const latestIndex = data.indexes.reduce((latest, current) => {
                     return new Date(current.modified) > new Date(latest.modified) ? current : latest;
                 }, data.indexes[0]);
+                
+                console.log('Latest index:', latestIndex);
 
                 // Pass just the filenames, not the full paths
                 loadIndex(latestIndex.name, latestIndex.metadata);
             },
             error: function(xhr, status, error) {
+                console.error('LoadLatestIndex AJAX error:', status, error);
                 showAppMessage('Failed to load indexes: ' + error, 'error');
             }
         });
@@ -574,16 +580,22 @@ $(document).ready(function() {
             url: '/api/list-indexes',
             method: 'GET',
             success: function(data) {
+                console.log('API response:', data);
+                
                 if (data.error) {
+                    console.error('API error:', data.error);
                     $('#indexListContainer').html('<p class="text-danger">' + data.error + '</p>');
                     return;
                 }
 
                 if (!data.indexes || data.indexes.length === 0) {
+                    console.log('No indexes returned from API');
                     $('#indexListContainer').html('<p class="text-muted">No indexes found.</p>');
                     return;
                 }
 
+                console.log('Found indexes:', data.indexes);
+                
                 let html = '';
                 data.indexes.forEach(function(index) {
                     const date = new Date(index.modified);
@@ -600,8 +612,10 @@ $(document).ready(function() {
                 });
                 
                 $('#indexListContainer').html(html);
+                console.log('Index list HTML updated with', data.indexes.length, 'indexes');
             },
             error: function(xhr, status, error) {
+                console.error('AJAX error:', status, error);
                 $('#indexListContainer').html('<p class="text-danger">Failed to load indexes: ' + error + '</p>');
             }
         });
