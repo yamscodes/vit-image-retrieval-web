@@ -354,16 +354,22 @@ def register_routes(app):
             # Also check common alternative locations
             # Sometimes indexes are created in the current working directory
             # or in a different relative path
+            # Get the script directory (where run_web_app.py is)
+            script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+            
             search_folders = [
                 index_folder,
+                os.path.join(script_dir, 'indexes'),
                 os.path.join(os.getcwd(), 'indexes'),
                 os.path.abspath('indexes'),
+                script_dir,
             ]
             
             # Remove duplicates while preserving order
             unique_folders = []
             for folder in search_folders:
-                if folder not in unique_folders:
+                normalized = os.path.normpath(folder)
+                if normalized not in [os.path.normpath(f) for f in unique_folders]:
                     unique_folders.append(folder)
             
             logger.info(f"Searching for indexes in folders: {unique_folders}")
