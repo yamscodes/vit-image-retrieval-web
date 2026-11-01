@@ -423,8 +423,9 @@ def register_routes(app):
             
             for faiss_file in faiss_files:
                 if faiss_file.startswith('index_'):
-                    # Remove 'index_' prefix and '.faiss' suffix
-                    identifier = faiss_file[7:-6]  # index_<identifier>.faiss -> <identifier>
+                    # Remove 'index_' prefix (6 chars) and '.faiss' suffix (6 chars)
+                    # FIX: Changed from [7:-6] to [6:-6] to correctly extract identifier
+                    identifier = faiss_file[6:-6]  # index_<identifier>.faiss -> <identifier>
                     metadata_file = f"metadata_{identifier}.json"
                     
                     if metadata_file in json_files and metadata_file not in paired_metadata:
