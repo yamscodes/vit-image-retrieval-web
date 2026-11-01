@@ -432,12 +432,61 @@ def register_routes(app):
             
             logger.info(f"Found {len(indexes)} valid index pairs in {index_folder}")
             
+            # Add num_images to each index by reading metadata
+            for idx in indexes:
+                try:
+                    import json
+                    metadata_path = os.path.join(index_folder, idx['metadata'])
+                    with open(metadata_path, 'r') as f:
+                        metadata = json.load(f)
+                    idx['num_images'] = len(metadata)
+                except Exception as e:
+                    logger.warning(f"Could not read metadata for {idx['metadata']}: {e}")
+                    idx['num_images'] = 0
+            
             return jsonify({'indexes': indexes})
             
         except Exception as e:
             logger.error(f"Error listing indexes: {str(e)}")
             import traceback
             logger.error(traceback.format_exc())
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/delete-index', methods=['POST'])
+    def api_delete_index():
+        """Delete an index file pair."""
+        try:
+            index_name = request.form.get('index_name')
+            metadata_name = request.form.get('metadata_name')
+            
+            if not index_name or not metadata_name:
+                return jsonify({'error': 'Both index_name and metadata_name are required'}), 400
+            
+            # Construct full paths
+            index_path = os.path.join(app.config['INDEX_FOLDER'], index_name)
+            metadata_path = os.path.join(app.config['INDEX_FOLDER'], metadata_name)
+            
+            logger.info(f"Deleting index: {index_path}")
+            logger.info(f"Deleting metadata: {metadata_path}")
+            
+            # Check if files exist
+            if not os.path.exists(index_path):
+                return jsonify({'error': f'Index file not found: {index_name}'}), 404
+            if not os.path.exists(metadata_path):
+                return jsonify({'error': f'Metadata file not found: {metadata_name}'}), 404
+            
+            # Delete files
+            try:
+                os.remove(index_path)
+                os.remove(metadata_path)
+                logger.info(f"Successfully deleted {index_name} and {metadata_name}")
+                return jsonify({'success': True})
+            except Exception as e:
+                logger.error(f"Error deleting files: {e}")
+                return jsonify({'error': f'Failed to delete files: {str(e)}'}), 500
+            
+        except Exception as e:
+            logger.error(f"Error in delete-index: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/index-info', methods=['POST'])
