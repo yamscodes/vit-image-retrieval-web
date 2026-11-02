@@ -115,6 +115,11 @@ def register_routes(app):
     def index_management():
         """Index management page."""
         return render_template('index_management.html')
+
+    @app.route('/image-optimization')
+    def image_optimization():
+        """Image optimization page."""
+        return render_template('image_optimization.html')
     
     # API Routes
     
@@ -632,6 +637,120 @@ def register_routes(app):
             logger.error(traceback.format_exc())
             return jsonify({'error': str(e)}), 500
 
+    @app.route('/api/remove-background', methods=['POST'])
+    def api_remove_background():
+        """Remove background from uploaded images using SciPy."""
+        try:
+            if 'images' not in request.files:
+                return jsonify({'error': 'No images uploaded'}), 400
+            
+            files = request.files.getlist('images')
+            if not files or all(f.filename == '' for f in files):
+                return jsonify({'error': 'No valid images uploaded'}), 400
+            
+            import os
+            import numpy as np
+            from PIL import Image
+            from scipy import ndimage
+            from io import BytesIO
+            
+            # Get or create the optimized_images folder
+            optimized_folder = app.config['INDEX_FOLDER']
+            # Go up one level from indexes to get repo root
+            repo_root = Path(optimized_folder).parent
+            optimized_images_folder = repo_root / 'optimized_images'
+            os.makedirs(optimized_images_folder, exist_ok=True)
+            
+            results = []
+            processed_count = 0
+            
+            for file in files:
+                if file.filename == '':
+                    continue
+                
+                # Read the image
+                img = Image.open(file.stream)
+                
+                # Convert to numpy array
+                if img.mode == 'RGBA':
+                    img_array = np.array(img)
+                    alpha = img_array[:, :, 3]
+                else:
+                    img = img.convert('RGB')
+                    img_array = np.array(img)
+                    alpha = np.ones(img_array.shape[:2], dtype=np.uint8) * 255
+                
+                # Convert to grayscale for thresholding
+                gray = np.array(img.convert('L'))
+                
+                # Threshold the image to create a binary mask
+                # Use Otsu's method to automatically determine the threshold
+                threshold_value = ndimage.threshold_otsu(gray)
+                binary = gray > threshold_value
+                
+                # Find the largest connected component (the main object)
+                labeled_array, num_features = ndimage.label(binary)
+                
+                if num_features > 0:
+                    # Find the largest component
+                    component_sizes = np.bincount(labeled_array.ravel())
+                    largest_component = np.argmax(component_sizes[1:]) + 1  # +1 because 0 is background
+                    
+                    # Create a mask for the largest component
+                    mask = (labeled_array == largest_component)
+                    
+                    # Apply the mask to the alpha channel
+                    new_alpha = np.where(mask, alpha, 0)
+                    
+                    # Create RGBA image with the new alpha
+                    if img_array.shape[2] == 3:
+                        rgba_array = np.dstack([img_array, new_alpha])
+                    else:
+                        rgba_array = img_array.copy()
+                        rgba_array[:, :, 3] = new_alpha
+                    
+                    # Save the optimized image
+                    optimized_filename = f"optimized_{file.filename}"
+                    optimized_path = optimized_images_folder / optimized_filename
+                    
+                    optimized_img = Image.fromarray(rgba_array, 'RGBA')
+                    optimized_img.save(optimized_path)
+                    
+                    results.append({
+                        'original_filename': file.filename,
+                        'optimized_filename': optimized_filename
+                    })
+                    processed_count += 1
+                else:
+                    # No objects found, save the original with transparent background
+                    optimized_filename = f"optimized_{file.filename}"
+                    optimized_path = optimized_images_folder / optimized_filename
+                    
+                    rgba_array = np.dstack([img_array, np.zeros(img_array.shape[:2], dtype=np.uint8)])
+                    optimized_img = Image.fromarray(rgba_array, 'RGBA')
+                    optimized_img.save(optimized_path)
+                    
+                    results.append({
+                        'original_filename': file.filename,
+                        'optimized_filename': optimized_filename
+                    })
+                    processed_count += 1
+            
+            return jsonify({
+                'success': True,
+                'processed_count': processed_count,
+                'results': results
+            })
+            
+        except ImportError as e:
+            logger.error(f"Required library not available: {str(e)}")
+            return jsonify({'error': f'Required library not available: {str(e)}. Please install scipy, pillow, and numpy.'}), 500
+        except Exception as e:
+            logger.error(f"Error in remove-background: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/upload-image', methods=['POST'])
     def api_upload_image():
         """API endpoint for uploading images."""
@@ -677,6 +796,13 @@ def register_routes(app):
     def uploaded_file(filename):
         """Serve uploaded files."""
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+    @app.route('/optimized_images/<filename>')
+    def optimized_image(filename):
+        """Serve optimized images."""
+        # Go up one level from indexes to get repo root
+        optimized_folder = Path(app.config['INDEX_FOLDER']).parent / 'optimized_images'
+        return send_from_directory(str(optimized_folder), filename)
 
     @app.route('/indexes/<filename>')
     def index_file(filename):
