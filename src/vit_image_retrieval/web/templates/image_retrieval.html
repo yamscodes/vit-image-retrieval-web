@@ -77,6 +77,15 @@
     .similarity-score.low {
         color: #dc3545;
     }
+    .result-card.highest {
+        border-left: 4px solid;
+        box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.2);
+    }
+    .result-card.highest .similarity-score.high {
+        border: 2px solid #28a745;
+        border-radius: 4px;
+        padding: 6px 10px;
+    }
     
     .image-grid {
         display: grid;
@@ -549,10 +558,14 @@ $(document).ready(function() {
         // Clear previous results
         $('#resultsGrid').empty();
         
+        // Find the highest similarity result
+        const highestSimilarity = Math.max(...data.results.map(r => r.similarity));
+        
         // Display each result
         data.results.forEach(function(result, index) {
             const rank = index + 1;
             const similarityPercent = (result.similarity * 100).toFixed(1);
+            const isHighest = result.similarity === highestSimilarity;
             
             // Determine similarity class based on percentage
             let similarityClass = 'low';
@@ -562,8 +575,9 @@ $(document).ready(function() {
                 similarityClass = 'medium';
             }
             
+            const highestClass = isHighest ? 'highest' : '';
             const resultHtml = `
-                <div class="result-card">
+                <div class="result-card ${highestClass}">
                     <div class="rank-badge">#${rank}</div>
                     <img src="${result.path}" class="result-image" alt="Result ${rank}" 
                          onclick="window.open('${result.path}', '_blank')">
@@ -692,7 +706,8 @@ $(document).ready(function() {
 
                 currentIndex = {
                     name: indexName,
-                    size: data.num_images
+                    size: data.num_images,
+                    indexed_at: data.created_at || new Date().toISOString().split('T')[0]
                 };
 
                 // Update UI
@@ -703,11 +718,13 @@ $(document).ready(function() {
                 // Save active index to localStorage
                 localStorage.setItem('activeIndex', JSON.stringify({
                     name: indexName,
-                    metadata: metadataName
+                    metadata: metadataName,
+                    indexed_at: currentIndex.indexed_at
                 }));
                 
-                // Refresh index list to show active state
+                // Refresh index list and system stats
                 loadIndexList();
+                loadSystemStats();
             },
             error: function(xhr, status, error) {
                 showAppMessage('Failed to load index: ' + error, 'error');
@@ -767,6 +784,10 @@ $(document).ready(function() {
                 }
 
                 let statsHtml = '<ul class="list-group list-group-flush">';
+                // Add index date/time if available
+                if (currentIndex && currentIndex.indexed_at) {
+                    statsHtml += '<li class="list-group-item"><strong>Index Date:</strong> ' + currentIndex.indexed_at + '</li>';
+                }
                 if (data.num_images !== undefined) {
                     statsHtml += '<li class="list-group-item"><strong>Indexed Images:</strong> ' + data.num_images + '</li>';
                 }

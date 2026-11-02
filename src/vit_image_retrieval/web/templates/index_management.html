@@ -77,6 +77,15 @@
     .similarity-score.low {
         color: #dc3545;
     }
+    .result-card.highest {
+        border-left: 4px solid;
+        box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.2);
+    }
+    .result-card.highest .similarity-score.high {
+        border: 2px solid #28a745;
+        border-radius: 4px;
+        padding: 6px 10px;
+    }
     
     .image-grid {
         display: grid;
@@ -231,84 +240,9 @@
                             </div>
                         </div>
 
-                        <!-- Query Image Selection -->
-                        <div class="card mb-4">
-                            <div class="card-header">
-                                <h5><i class="fas fa-image"></i> Query Image</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="drop-zone" id="dropZone">
-                                    <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
-                                    <h5>Drop Query Image Here</h5>
-                                    <p class="text-muted">or click to browse</p>
-                                    <input type="file" id="queryImageInput" accept=".png,.jpg,.jpeg,.webp" style="display: none;">
-                                </div>
-                                
-                                <div id="queryPreview" style="display: none;">
-                                    <div class="image-preview-container">
-                                        <img id="queryImagePreview" class="query-image" src="" alt="Query Image">
-                                    </div>
-                                    <div class="image-info">
-                                        <p><strong>File:</strong> <span id="queryFilename"></span></p>
-                                    </div>
-                                </div>
+                        
 
-                                <div class="row mt-3">
-                                    <div class="col-md-6">
-                                        <label for="numResults" class="form-label">
-                                            <i class="fas fa-list-ol"></i> Number of Results
-                                        </label>
-                                        <input type="number" class="form-control" id="numResults" 
-                                               min="1" max="20" value="5">
-                                    </div>
-                                </div>
-
-                                <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-                                    <button type="button" class="btn btn-secondary me-md-2" id="clearQueryBtn">
-                                        <i class="fas fa-times"></i> Clear
-                                    </button>
-                                    <button type="button" class="btn btn-primary" id="searchBtn" disabled>
-                                        <i class="fas fa-search"></i> Search
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Search Results -->
-                        <div id="resultsContainer" style="display: none;">
-                            <div class="card">
-                                <div class="card-header bg-success text-white">
-                                    <h5><i class="fas fa-check-circle"></i> Search Results</h5>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <h6>Query Image</h6>
-                                            <img id="resultQueryImage" class="query-image" src="" alt="Query Image">
-                                        </div>
-                                        <div class="col-md-6">
-                                            <h6>Results Summary</h6>
-                                            <div class="alert alert-info">
-                                                Found <strong id="resultsCount">0</strong> similar images
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <h6 class="mt-4"><i class="fas fa-images"></i> Similar Images</h6>
-                                    <div id="resultsGrid" class="image-grid">
-                                        <!-- Results will be populated here -->
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div id="errorContainer" class="alert alert-danger" style="display: none;">
-                            <i class="fas fa-exclamation-circle"></i> <strong>Error:</strong> <span id="errorMessage"></span>
-                        </div>
-
-                        <div id="loadingContainer" style="display: none;">
-                            <div class="text-center py-4">
-                                <div class="loading-spinner"></div>
+                        
                                 <p class="mt-2">Searching for similar images...</p>
                             </div>
                         </div>
@@ -365,8 +299,6 @@
 <script>
 $(document).ready(function() {
     let currentIndex = null;
-    let currentQueryImage = null;
-
     // Load system stats
     loadSystemStats();
     
@@ -549,10 +481,14 @@ $(document).ready(function() {
         // Clear previous results
         $('#resultsGrid').empty();
         
+        // Find the highest similarity result
+        const highestSimilarity = Math.max(...data.results.map(r => r.similarity));
+        
         // Display each result
         data.results.forEach(function(result, index) {
             const rank = index + 1;
             const similarityPercent = (result.similarity * 100).toFixed(1);
+            const isHighest = result.similarity === highestSimilarity;
             
             // Determine similarity class based on percentage
             let similarityClass = 'low';
@@ -562,8 +498,9 @@ $(document).ready(function() {
                 similarityClass = 'medium';
             }
             
+            const highestClass = isHighest ? 'highest' : '';
             const resultHtml = `
-                <div class="result-card">
+                <div class="result-card ${highestClass}">
                     <div class="rank-badge">#${rank}</div>
                     <img src="${result.path}" class="result-image" alt="Result ${rank}" 
                          onclick="window.open('${result.path}', '_blank')">
@@ -692,22 +629,25 @@ $(document).ready(function() {
 
                 currentIndex = {
                     name: indexName,
-                    size: data.num_images
+                    size: data.num_images,
+                    indexed_at: data.created_at || new Date().toISOString().split('T')[0]
                 };
 
                 // Update UI
                 $('#noIndexAlert').hide();
                 $('#indexLoadSuccess').show();
-                $('#searchBtn').prop('disabled', currentQueryImage === null);
+                
                 
                 // Save active index to localStorage
                 localStorage.setItem('activeIndex', JSON.stringify({
                     name: indexName,
-                    metadata: metadataName
+                    metadata: metadataName,
+                    indexed_at: currentIndex.indexed_at
                 }));
                 
-                // Refresh index list to show active state
+                // Refresh index list and system stats
                 loadIndexList();
+                loadSystemStats();
             },
             error: function(xhr, status, error) {
                 showAppMessage('Failed to load index: ' + error, 'error');
@@ -767,6 +707,10 @@ $(document).ready(function() {
                 }
 
                 let statsHtml = '<ul class="list-group list-group-flush">';
+                // Add index date/time if available
+                if (currentIndex && currentIndex.indexed_at) {
+                    statsHtml += '<li class="list-group-item"><strong>Index Date:</strong> ' + currentIndex.indexed_at + '</li>';
+                }
                 if (data.num_images !== undefined) {
                     statsHtml += '<li class="list-group-item"><strong>Indexed Images:</strong> ' + data.num_images + '</li>';
                 }

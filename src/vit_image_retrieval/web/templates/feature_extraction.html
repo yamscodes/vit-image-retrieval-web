@@ -360,6 +360,8 @@ $(document).ready(function() {
                 // Check if it's one of our buttons that should be allowed
                 const isAllowedButton = target.attr('id') === 'cancelBtn' || 
                                        target.attr('id') === 'goToRetrievalBtn' ||
+                                       target.attr('id') === 'extractBtn' ||
+                                       target.parents('#extractionForm').length > 0 ||
                                        target.parents('.modal').length > 0;
                 
                 if (!isAllowedButton) {
@@ -374,13 +376,16 @@ $(document).ready(function() {
         }
     });
     
-    // Also intercept form submissions
+    // Also intercept form submissions (but NOT the extraction form when starting)
     $(document).on('submit', 'form', function(e) {
         if (processingActuallyStarted && !leaveModalShown) {
-            e.preventDefault();
-            $('#leaveConfirmModal').modal('show');
-            leaveModalShown = true;
-            return false;
+            // Don't block the extraction form submission itself
+            if (!$(this).is('#extractionForm')) {
+                e.preventDefault();
+                $('#leaveConfirmModal').modal('show');
+                leaveModalShown = true;
+                return false;
+            }
         }
     });
     
